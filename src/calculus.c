@@ -186,24 +186,13 @@ double Rsimps2D_sphere(
         int nphi, int ntheta, Rarray theta, Rarray f, double dphi)
 {
 
-/** INTEGRATION OF A FUNCTION OF 2 VARIABLES
-  * ----------------------------------------
-  *
-  * Here the function must be stored in a vector, where given point a
-  * point in the grid (xi,yj) then
-  *
-  *     funtion(xi,yj) = f[i + nx * j]
-  *
-  * where i = 0, 1, ..., nx-1 and j = 0, 1, ..., ny-1 and the grid points
-  * are linearly spaced xi = x0 + i*hx as well as yj = y0 + j*hy      **/
+/** INTEGRATE FUNCTION OF 2 VARIABLES IN SPHERICAL COORDINATES **/
 
     unsigned int
         j;
-
     double
         dtheta,
         result;
-
     Rarray
         f_theta;
 
@@ -220,9 +209,7 @@ double Rsimps2D_sphere(
     result = Rsimps1D(ntheta,f_theta,dtheta);
 
     free(f_theta);
-
     return result;
-
 }
 
 

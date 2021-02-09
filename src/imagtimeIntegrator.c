@@ -3,6 +3,25 @@
 
 void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
 {
+
+/** Apply Crank-Nicolson finite-difference operator in theta direction
+    ------------------------------------------------------------------
+    After using a Fourier transform in phi axis, the equation in theta
+    direction turns out to be dependent on the azimuthal number  which
+    also influences the boundary condition at the poles.
+
+    Input Parameters
+    ----------------
+    `EQ` : physical parameters of GP-equation and grid information
+    `azi_num` : azimuthal number from phi-Fourier transformation
+    `psi` : sizeof(`EQ->ntheta`) function of theta for a fixed `azi_num`
+
+    Output Parameter
+    ----------------
+    `cn_psi` : sizeof(`psi`) result of CN operator acting on `psi`
+
+**/
+
     int
         i,
         size;
@@ -26,6 +45,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
     nabla_coef = EQ->nabla_coef;
     azi_num_sq = azi_num * azi_num;
 
+    // set the core points not influenced by the boundaries
     for (i = 2; i < size - 2; i ++)
     {
         sin_th = sin(theta[i]);
@@ -38,9 +58,11 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         );
     }
 
-    // Work near the boundary. `azi_num` = 0 implies Neumann boundary with
-    // the outsize domain point as the one preeceding \pi or next of 0.
-    // `azi_num` != 0 implies zero at the sphere poles, \pi and 0.
+    // Work near the boundary. `azi_num` = 0 implies Neumann boundary condition
+    // i.e., the derivative must be zero at theta = 0,\pi. Thus, the forward
+    // point at \theta = \pi is just the backward one rotate by \pi in \phi,
+    // which turns out to be the simply backward point for `azi_num` = 0.
+    // `azi_num` != 0 implies zero at \theta = \pi and 0.
     if (azi_num_sq == 0)
     {
         // same as before but with `azi_num` == 0
@@ -99,12 +121,24 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
 }
 
 
-void _get_psi_theta(int ntheta, int nphi, int phi_fft_index,
-        Carray psi, Carray psi_th)
+void _get_psi_theta(
+        int ntheta, int nphi, int phi_fft_index, Carray psi, Carray psi_th)
 {
+
+/** Fix index of azimuthal quantum number and extract function of theta
+    -------------------------------------------------------------------
+    Walk in strides through the vector representation of 2D function to
+    fix azimuthal number and get a 1D function of \theta
+
+    Output Parameter
+    ----------------
+    `psi_th`: sizeof(ntheta) function of theta for `phi_fft_index`
+
+**/
+
     if (phi_fft_index > nphi - 2)
     {
-        printf("\n\nInvalid access separating psi as function of theta\n");
+        printf("\n\nInvalid phi-FFT point to fix in _get_psi_theta\n");
         exit(EXIT_FAILURE);
     }
 
@@ -118,9 +152,21 @@ void _get_psi_theta(int ntheta, int nphi, int phi_fft_index,
 void _set_psi_theta(int ntheta, int nphi, int phi_fft_index,
         Carray psi_th, Carray psi)
 {
+
+/** Fix index of azimuthal quantum number and set function of theta
+    ---------------------------------------------------------------
+    Walk in strides through the vector representation of 2D function
+    setting values for theta axis within fix azimuthal number.
+
+    Output Parameter
+    ----------------
+    `psi`: sizeof(ntheta * nphi) function of theta and phi-FFT
+
+**/
+
     if (phi_fft_index > nphi - 2)
     {
-        printf("\n\nInvalid access separating psi as function of theta\n");
+        printf("\n\nInvalid phi-FFT point to fix in _set_psi_theta\n");
         exit(EXIT_FAILURE);
     }
 
@@ -133,6 +179,25 @@ void _set_psi_theta(int ntheta, int nphi, int phi_fft_index,
 
 int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 {
+
+/** Imaginary time evolution for two component system in spherical shell
+    --------------------------------------------------------------------
+    Given initial conditions, discretized functions of theta and phi,
+    this function propaga in imaginary time to converge the initial
+    condition to the system's ground state.
+
+    Input Parameters
+    ----------------
+    `EQ` : structure with all equation parameters and grid domain information
+    `Sa` : initial state for species A
+    `Sb` : initial state for species B
+
+    Output Parameters
+    -----------------
+    `Sa` : final state of species A
+    `Sb` : final state of species B
+
+**/
 
     int
         m,
@@ -214,11 +279,12 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 
     // Arrays in tridiagonal system from Crank-Nicolson method for theta
     // As for m = 0 we have different boundary conditions, the upper and
-    // lower arrays of tridiagonal matrix change
+    // lower arrays of tridiagonal matrix change in size and last elements
     upper = carrDef(ntheta - 3);
     lower = carrDef(ntheta - 3);
     upper_m0 = carrDef(ntheta - 1);
     lower_m0 = carrDef(ntheta - 1);
+
     // the diagonal change for all azimuthal numbers
     mid = cmatDef(nphi - 1, ntheta);
 
@@ -235,8 +301,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     // the first frequency/azimuthal number is aways zero
     for (m = 0; m < l; m++)
     {
-        if (m <= (l - 1) / 2) { azi[m] = m; }
-        else                  { azi[m] = m - l; }
+        if (m <= (l - 1) / 2) azi[m] = m;
+        else                  azi[m] = m - l;
     }
 
     // Crank-Nicolson implicit scheme for theta in phi-momentum space
@@ -258,6 +324,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         mid[0][j] = I + nabla_coef * dt / dtheta / dtheta;
     }
 
+    // set off-diagonals for general m != 0
     for (j = 1; j < ntheta - 2; j++)
     {
         upper[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
@@ -268,6 +335,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         );
     }
 
+    // set off-diagonals for m = 0
     for (j = 1; j < ntheta - 1; j++)
     {
         upper_m0[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
@@ -336,10 +404,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
         }
 
-        // back to positional space in phi-axis
-        carrCopy(grid_points, phi_fft, Sa);
-
         // set periodic boundary at 2 * Pi
+        carrCopy(grid_points, phi_fft, Sa);
         for (j = 0; j < ntheta; j++)
         {
             Sa[j * nphi + nphi - 1] = Sa[j * nphi];
