@@ -26,15 +26,15 @@ phi, the = np.meshgrid(phi, the)
 # add others with random weights
 psi = sph_harm(0, 0, phi, the)
 psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1] = (
-   psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1]
-   + np.random.random([psi.shape[0] - 2, psi.shape[1] - 2]) / 5
+    psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1]
+    + np.random.random([psi.shape[0] - 2, psi.shape[1] - 2]) / 5
 )
 w = (np.random.random(int((2 * lmax + 1 + 1) * (lmax + 1) / 2)) - 0.5) / 0.2
 k = 0
 for l in range(1, lmax + 1):
-   for m in range(-l, l + 1):
-       psi = psi + w[k] * sph_harm(m, l, phi, the) / sqrt(factorial(l))
-       k = k + 1
+    for m in range(-l, l + 1):
+        psi = psi + w[k] * sph_harm(m, l, phi, the) / sqrt(factorial(l))
+        k = k + 1
 
 
 # normalize to 1. Attention to sin(theta) spherical coordinates jacobian
@@ -46,22 +46,22 @@ psi = psi / np.sqrt(simps(np.sin(the[:, 0]) * integral_phi, dx=dthe))
 
 
 # Record initial state A
-inp_path = str(Path.home()) + "/programs/becinashell/input/"
+inp_path = str(Path.home()) + "/programs/bec_spherical_shell/input/"
 np.savetxt(
     inp_path + "state_speciesA_init.dat", psi.reshape(Nphi * Nthe).T, fmt="%.15E"
 )
 
 psi = sph_harm(0, 0, phi, the)
 psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1] = (
-   psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1]
-   + np.random.random([psi.shape[0] - 2, psi.shape[1] - 2]) / 5
+    psi[1 : psi.shape[0] - 1, 1 : psi.shape[1] - 1]
+    + np.random.random([psi.shape[0] - 2, psi.shape[1] - 2]) / 5
 )
-w = (np.random.random(int((2 * lmax + 1 + 1) * (lmax + 1) / 2)) - 0.5) / 0.1
+w = (np.random.random(int((2 * lmax + 1 + 1) * (lmax + 1) / 2)) - 0.5) / 0.2
 k = 0
 for l in range(1, lmax + 1):
-   for m in range(-l, l + 1):
-       psi = psi + w[k] * sph_harm(m, l, phi, the) / sqrt(factorial(l))
-       k = k + 1
+    for m in range(-l, l + 1):
+        psi = psi + w[k] * sph_harm(m, l, phi, the) / sqrt(factorial(l))
+        k = k + 1
 
 
 # normalize to 1. Attention to sin(theta) spherical coordinates jacobian
@@ -73,7 +73,7 @@ psi = psi / np.sqrt(simps(np.sin(the[:, 0]) * integral_phi, dx=dthe))
 
 
 # Record initial state A
-inp_path = str(Path.home()) + "/programs/becinashell/input/"
+inp_path = str(Path.home()) + "/programs/bec_spherical_shell/input/"
 np.savetxt(
     inp_path + "state_speciesB_init.dat", psi.reshape(Nphi * Nthe).T, fmt="%.15E"
 )
