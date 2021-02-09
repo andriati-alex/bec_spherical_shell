@@ -43,14 +43,14 @@ void abs_grad_sphere_square(
         }
     }
 
-    // compute derivatives in poles theta = 0 and theta = PI
-    // backward point in theta = 0 is the forward one rotated PI in phi
-    // forward point in theta = PI is the backward one rotated PI in phi
-    // Avoid exceeding boundary if PI rotation yield phi > 2 * PI
+    // compute derivatives at poles theta = 0 and theta = PI following:
+    // 1. backward point in theta = 0 is the forward one rotated PI in phi
+    // 2. forward point in theta = PI is the backward one rotated PI in phi
+    // 3. Avoid exceeding boundary if PI rotation yield phi > 2 * PI
     for (i_phi = 0; i_phi < nphi; i_phi++)
     {
         phi_point = nphi + i_phi;
-        pi_rotation = nphi / 2 - (i_phi / (nphi / 2)) * (nphi - 1);
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
         grad_theta[i_phi] = (
                 (state[phi_point] - state[phi_point + pi_rotation])
                 / ( 2 * dtheta)
@@ -59,7 +59,7 @@ void abs_grad_sphere_square(
     for (i_phi = 0; i_phi < nphi; i_phi++)
     {
         phi_point = (ntheta - 2) * nphi + i_phi;
-        pi_rotation = nphi / 2 - (i_phi / (nphi / 2)) * (nphi - 1);
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
         grad_theta[(ntheta - 1) * nphi + i_phi] = (
                 (state[phi_point + pi_rotation] - state[phi_point])
                 / ( 2 * dtheta)
@@ -239,6 +239,7 @@ double density_overlap(EqDataPkg EQ, Rarray density_a, Rarray density_b)
     integ_ab = rarrDef(EQ->ntheta * EQ->nphi);
     integ_a = rarrDef(EQ->ntheta * EQ->nphi);
     integ_b = rarrDef(EQ->ntheta * EQ->nphi);
+
     for (i = 0; i < EQ->ntheta * EQ->nphi; i++)
     {
         integ_ab[i] = density_a[i] * density_b[i];
