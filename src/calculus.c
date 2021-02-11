@@ -213,6 +213,37 @@ double Rsimps2D_sphere(
 }
 
 
+double complex Csimps2D_sphere(
+        int nphi, int ntheta, Rarray theta, Carray f, double dphi)
+{
+
+/** INTEGRATE FUNCTION OF 2 VARIABLES IN SPHERICAL COORDINATES **/
+
+    unsigned int
+        j;
+    double
+        dtheta,
+        result;
+    Carray
+        f_theta;
+
+    dtheta = theta[1] - theta[0];
+    f_theta = carrDef(ntheta);
+
+//  #pragma omp parallel for private(j) schedule(static)
+    for (j = 0; j < ntheta; j++)
+    {
+        // Integrate in phi and multiply by the jacobian term sin(theta)
+        f_theta[j] = sin(theta[j]) * Csimps1D(nphi,&f[j*nphi],dphi);
+    }
+
+    result = Csimps1D(ntheta,f_theta,dtheta);
+
+    free(f_theta);
+    return result;
+}
+
+
 void renormalize_spheric(EqDataPkg EQ, Carray S)
 {
     int

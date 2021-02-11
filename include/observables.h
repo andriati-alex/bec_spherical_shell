@@ -3,6 +3,8 @@
 
 #include "calculus.h"
 
+double angular_momentum_lz(int, int, double, Rarray, Carray);
+
 double functionals_single(EqDataPkg, Carray, double *, double *);
 
 double functionals(EqDataPkg, Carray, Carray, double *, double *, double *);

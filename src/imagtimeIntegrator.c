@@ -195,6 +195,7 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         grid_points,
         display_info_stride;
     double
+        lz,
         mu,
         energy,
         kin_energy,
@@ -396,7 +397,10 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         {
             printf("%5.1lf%%",(100.0 * k) / EQ->nt);
             energy = functionals_single(EQ, S, &kin_energy, &mu);
-            printf("  %11.8lf  %11.8lf  %11.8lf\n", energy, kin_energy, mu);
+            lz = angular_momentum_lz(nphi, ntheta, dphi, theta, S);
+            printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
+                    energy, kin_energy, mu, lz
+            );
         }
 
     }
@@ -453,6 +457,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         grid_points,
         display_info_stride;
     double
+        lza,
+        lzb,
         mu_a,
         mu_b,
         energy,
@@ -748,8 +754,11 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
             den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
             printf("%5.1lf%%",(100.0 * k) / EQ->nt);
-            printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf\n",
+            lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
+            lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+            printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
                     energy, kin_energy, mu_a, mu_b, den_overlap);
+            printf("  %11.8lf  %11.8lf\n", lza, lzb);
         }
 
     }

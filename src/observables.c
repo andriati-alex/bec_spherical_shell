@@ -1,6 +1,42 @@
 #include "observables.h"
 
 
+double angular_momentum_lz(
+        int nphi, int ntheta, double dphi, Rarray theta, Carray state)
+{
+    int
+        j;
+    double
+        lz;
+    Carray
+        integ,
+        ds_dphi;
+
+    ds_dphi = carrDef(nphi * ntheta);
+    integ = carrDef(nphi * ntheta);
+
+    for (j = 1; j < nphi - 1; j++)
+    {
+        derivative_periodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
+    }
+
+    // at the poles the function is constant with respect to phi
+    carrFill(nphi, 0.0 + 0.0 * I, &ds_dphi[0]);
+    carrFill(nphi, 0.0 + 0.0 * I, &ds_dphi[(ntheta-1)*nphi]);
+
+    for (j = 0; j < nphi * ntheta; j++)
+    {
+        integ[j] = conj(state[j]) * ds_dphi[j];
+    }
+
+    lz = creal(-I * Csimps2D_sphere(nphi, ntheta, theta, integ, dphi));
+    free(ds_dphi);
+    free(integ);
+
+    return lz;
+}
+
+
 void abs_grad_sphere_square(
         int nphi, int ntheta, double dphi,
         Rarray theta, Carray state, Rarray abs_grad_square)
@@ -102,7 +138,9 @@ double functionals_single(
     double
         total_energy,
         g,
+        lz,
         dphi,
+        omega,
         nabla_coef;
     Rarray
         theta,
@@ -117,6 +155,7 @@ double functionals_single(
     ntheta = EQ->ntheta;
     theta = EQ->theta;
     g = EQ->ga;
+    omega = EQ->omega;
     nabla_coef = EQ->nabla_coef;
     grid_points = nphi * ntheta;
 
@@ -126,6 +165,7 @@ double functionals_single(
     abs_square = rarrDef(grid_points);
     abs_grad_square = rarrDef(grid_points);
 
+    lz = angular_momentum_lz(nphi, ntheta, dphi, theta, state);
     carrAbs2(grid_points, state, abs_square);
     abs_grad_sphere_square(nphi, ntheta, dphi, theta, state, abs_grad_square);
 
@@ -150,9 +190,15 @@ double functionals_single(
         }
     }
 
-    total_energy = Rsimps2D_sphere(nphi, ntheta, theta, Integ_energy, dphi);
-    (* kin) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_kin, dphi);
-    (* mu) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu, dphi);
+    total_energy = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ_energy, dphi)
+            - omega * lz
+    );
+    (* kin) = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ_kin, dphi)
+            - omega * lz
+    );
+    (* mu) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu, dphi) - omega * lz;
 
     free(abs_grad_square);
     free(abs_square);
@@ -168,25 +214,7 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
         double * kin, double * mu_a, double * mu_b)
 {
 
-/** Gross-Pitaesvkii functional
-  * ----------------------------
-  *
-  *  To compute the energy the value passed on g must be the contact
-  *  interaction strength divided by 2, otherwise gives the chemical
-  *  potential of the system. It divides by the norm of the function
-  *  in the end to enforce the result to be the particle average
-  *
-  *  Parameters
-  *
-  *  (nx,ny) - number of grid points in each direction
-  *  (hx,hy) - grid step in each direction
-  *  b - number to multiply second order derivatives
-  *  Ome - Angular rotation frequency
-  *  g - see description above
-  *  V - Potential values at grid points
-  *  f - function
-  *
-**/
+/** Gross-Pitaesvkii functional **/
 
     int
         j,
@@ -199,9 +227,12 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
         ga,
         gb,
         gab,
+        lza,
+        lzb,
         frac_a,
         frac_b,
         dphi,
+        omega,
         nabla_coef;
     Rarray
         theta,
@@ -223,6 +254,7 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
     ga = EQ->ga;
     gb = EQ->gb;
     gab = EQ->gab;
+    omega = EQ->omega;
     nabla_coef = EQ->nabla_coef;
     grid_points = nphi * ntheta;
 
@@ -235,6 +267,8 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
     abs_grad_square_a = rarrDef(grid_points);
     abs_grad_square_b = rarrDef(grid_points);
 
+    lza = angular_momentum_lz(nphi, ntheta, dphi, theta, state_a);
+    lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, state_b);
     carrAbs2(grid_points, state_a, abs_square_a);
     carrAbs2(grid_points, state_b, abs_square_b);
     abs_grad_sphere_square(
@@ -280,10 +314,22 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
         }
     }
 
-    total_energy = Rsimps2D_sphere(nphi, ntheta, theta, Integ, dphi);
-    (* kin) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_kin, dphi);
-    (* mu_a) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_a, dphi);
-    (* mu_b) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_b, dphi);
+    total_energy = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ, dphi)
+            - omega * (lza + lzb)
+    );
+    (* kin) = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ_kin, dphi)
+            - omega * (lza + lzb)
+    );
+    (* mu_a) = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_a, dphi)
+            - omega * lza
+    );
+    (* mu_b) = (
+            Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_b, dphi)
+            - omega * lzb
+    );
 
     free(abs_grad_square_a);
     free(abs_grad_square_b);
