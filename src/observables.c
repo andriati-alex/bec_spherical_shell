@@ -15,10 +15,11 @@ double angular_momentum_lz(
     ds_dphi = carrDef(nphi * ntheta);
     integ = carrDef(nphi * ntheta);
 
-    for (j = 1; j < nphi - 1; j++)
+    for (j = 1; j < ntheta - 1; j++)
     {
         derivative_periodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
     }
+
 
     // at the poles the function is constant with respect to phi
     carrFill(nphi, 0.0 + 0.0 * I, &ds_dphi[0]);

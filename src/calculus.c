@@ -222,7 +222,8 @@ double complex Csimps2D_sphere(
     unsigned int
         j;
     double
-        dtheta,
+        dtheta;
+    double complex
         result;
     Carray
         f_theta;

@@ -81,7 +81,7 @@ np.savetxt(
 
 # Configure domain
 f = open(inp_path + "state_domain.dat", "w")
-f.write("{} {} {} {}".format(Nphi, Nthe, 0.002, 10000))
+f.write("{} {} {} {}".format(Nphi, Nthe, 0.0001, 50000))
 f.close()
 
 
