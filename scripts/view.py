@@ -1,14 +1,19 @@
 import os
 import argparse
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
+mpl.rcParams["text.usetex"] = True
+mpl.rcParams["figure.subplot.hspace"] = 0.0
+mpl.rcParams["figure.subplot.wspace"] = 0.0
 
 
 class DensityPlot:
     def __init__(self, data_path, prefix, view_tool="matplotlib"):
         file_prefix = os.path.join(data_path, prefix)
-        eq_data = np.loadtxt(file_prefix + "_equation_imagtime.dat")
+        eq_data = np.loadtxt(file_prefix + "_2species_equation_imagtime.dat")
         self.phi = np.linspace(0, 2 * np.pi, int(eq_data[0]))
         self.theta = np.linspace(0, np.pi, int(eq_data[1]))
         self.nabla_coef = eq_data[4]
@@ -19,31 +24,51 @@ class DensityPlot:
         self.inter_b = eq_data[9]
         self.inter_ab = eq_data[10]
         self.state_a = np.loadtxt(
-            file_prefix + "_final_speciesA_imagtime.dat", dtype=np.complex128
+            file_prefix + "_speciesA_imagtime.dat", dtype=np.complex128
         ).reshape(self.theta.size, self.phi.size)
         self.state_b = np.loadtxt(
-            file_prefix + "_final_speciesB_imagtime.dat", dtype=np.complex128
+            file_prefix + "_speciesB_imagtime.dat", dtype=np.complex128
         ).reshape(self.theta.size, self.phi.size)
         self.abs_square_a = abs(self.state_a) ** 2
         self.abs_square_b = abs(self.state_b) ** 2
         self.view_tool = view_tool
 
-    def show_one_sphere(self):
-        phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
-        # sphere of unit radius
-        x = np.sin(tht_grid) * np.cos(phi_grid)
-        y = np.sin(tht_grid) * np.sin(phi_grid)
-        z = np.cos(tht_grid)
-        # create figure
+    def show_in_one_sphere(self):
         fig = plt.figure(figsize=plt.figaspect(1.0))
         ax = fig.gca(projection="3d")
-        colors_a = self.__get_colors("red", self.abs_square_a)
-        colors_b = self.__get_colors("blue", self.abs_square_b)
-        surf_a = ax.plot_surface(x, y, z, facecolors=colors_a, linewidth=0)
-        surf_b = ax.plot_surface(x, y, z, facecolors=colors_b, linewidth=0)
+        colors_a = self.__rgba_colors("red", self.abs_square_a)
+        colors_b = self.__rgba_colors("blue", self.abs_square_b)
+        surf_a = self.__plot_rgba_sphere(ax, 1.0, colors_a)
+        surf_b = self.__plot_rgba_sphere(ax, 1.0, colors_b)
         ax.set_axis_off()
         self.__set_view_angle(ax)
         plt.show()
+
+    def show_in_two_spheres(self):
+        # create figure
+        fig = plt.figure(figsize=(8, 6))
+        axa = fig.add_subplot(121, projection="3d")
+        axb = fig.add_subplot(122, projection="3d")
+        self.__plot_cmap_sphere(fig, axa, self.abs_square_a)
+        self.__plot_cmap_sphere(fig, axb, self.abs_square_b)
+        axa.set_title("$|\Psi_1(\\theta,\phi)|^2$")
+        axb.set_title("$|\Psi_2(\\theta,\phi)|^2$")
+        plt.show()
+        # plt.savefig("teste.png", dpi=1024, bbox_inches="tight")
+
+    def __cartesian_grid(self, radius):
+        phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
+        # sphere of unit radius
+        x = radius * np.sin(tht_grid) * np.cos(phi_grid)
+        y = radius * np.sin(tht_grid) * np.sin(phi_grid)
+        z = radius * np.cos(tht_grid)
+        return (x, y, z)
+
+    def __density_contrast(self, den):
+        return 1.0 - den.min() / den.max()
+
+    def __normalize_density(self, den):
+        return (den - den.min()) / (den.max() - den.min())
 
     def __set_view_angle(self, ax):
         stride = self.abs_square_a.argmax()
@@ -55,41 +80,73 @@ class DensityPlot:
         rotation = self.phi[j] * 180.0 / np.pi
         ax.view_init(elev=elevation, azim=rotation)
 
-    def __get_colors(self, main_color, abs_square, contrast_threshold=0.10):
-        max_den = abs_square.max()
-        min_den = abs_square.min()
+    def __rgba_colors(self, main_color, abs_square, contrast_threshold=0.10):
         if main_color == "red":
-            color_index = 0
-            fixed_opacity = 0.8
-            slope_factor = 4
+            rgb = np.array([1.0, 0.15, 0.15])
+            fixed_opacity = 0.7
+            slope_factor = 4.5
             x0 = 0.4
-        elif main_color == "green":
-            color_index = 1
-            fixed_opacity = 0.6
-            slope_factor = 3.5
-            x0 = 0.5
         else:
-            color_index = 2
-            fixed_opacity = 0.4
-            slope_factor = 3.0
+            rgb = np.array([0.3, 0.3, 1.0])
+            fixed_opacity = 0.2
+            slope_factor = 4.0
             x0 = 0.6
-        if 1.0 - min_den / max_den < contrast_threshold:
+        if self.__density_contrast(abs_square) < contrast_threshold:
             opacity = np.ones([self.theta.size, self.phi.size]) * fixed_opacity
         else:
-            normalized = (abs_square - min_den) / (max_den - min_den)
+            normalized = self.__normalize_density(abs_square)
             opacity = (np.tanh((normalized - x0) * slope_factor) + 1) / 2
         rgba_colors = np.zeros([self.theta.size, self.phi.size, 4])
         for i in range(self.theta.size):
             for j in range(self.phi.size):
-                rgba_colors[i, j, color_index] = 1.0
+                rgba_colors[i, j, :3] = rgb
                 rgba_colors[i, j, 3] = opacity[i, j]
         return rgba_colors
 
+    def __plot_rgba_sphere(self, ax, radius, colors):
+        x, y, z = self.__cartesian_grid(radius)
+        surface = ax.plot_surface(
+            x,
+            y,
+            z,
+            rstride=1,
+            cstride=1,
+            facecolors=colors,
+            linewidth=0,
+            antialiased=False,
+        )
+        return surface
 
-def run(data_path, prefix, view_tool):
-    data_class = DensityPlot(data_path, prefix)
-    data_class.show_one_sphere()
-    del data_class
+    def __plot_cmap_sphere(self, fig, ax, den, radius=1):
+        x, y, z = self.__cartesian_grid(radius)
+        den_colors = self.__normalize_density(den)
+        surf = ax.plot_surface(
+            x,
+            y,
+            z,
+            rstride=1,
+            cstride=1,
+            facecolors=mpl.cm.jet(den_colors),
+            linewidth=0,
+            antialiased=False,
+        )
+        ax.set_axis_off()
+        self.__set_view_angle(ax)
+        cmap_norm = mpl.colors.Normalize(vmin=den.min(), vmax=den.max())
+        fig.colorbar(
+            mpl.cm.ScalarMappable(cmap=mpl.cm.jet, norm=cmap_norm),
+            ax=ax,
+            shrink=0.4,
+        )
+
+
+def run(data_path, prefix, view_tool, view_mode):
+    data_plotting = DensityPlot(data_path, prefix)
+    if view_mode == "one-sphere":
+        data_plotting.show_in_one_sphere()
+    else:
+        data_plotting.show_in_two_spheres()
+    del data_plotting
 
 
 if __name__ == "__main__":
@@ -116,6 +173,13 @@ if __name__ == "__main__":
         type=str,
         default="matplotlib",
         help="Tool to plot : `matplotlib` or `mayavi`",
+    )
+    p.add_argument(
+        "--view-mode",
+        dest="view_mode",
+        type=str,
+        default="one-sphere",
+        help="Whether to plot color-scale densities in one or two spheres.",
     )
     args = p.parse_args()
     run(**vars(args))
