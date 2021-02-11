@@ -37,21 +37,28 @@ void ReachNewLine(FILE * f)
 }
 
 
-void save_equation_setup(FILE * f, EqDataPkg EQ)
+void save_equation_setup(FILE * f, EqDataPkg EQ, int num_species)
 {
     // Grid domain
     fprintf(f, "%d %d %lf %d ", EQ->nphi, EQ->ntheta, EQ->dt, EQ->nt);
     // Equation parameters
-    fprintf(
-            f,
-            "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf\n",
-            EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
-            EQ->ga, EQ->gb, EQ->gab
-    );
+    if (num_species == 2)
+    {
+        fprintf(
+                f,
+                "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf\n",
+                EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
+                EQ->ga, EQ->gb, EQ->gab
+        );
+    }
+    else
+    {
+        fprintf(f, "%.15lf %.15lf %.15lf\n", EQ->nabla_coef, EQ->omega, EQ->ga);
+    }
 }
 
 
-EqDataPkg setup_equation(char prefix [])
+EqDataPkg setup_equation(char prefix [], int num_species)
 {
 
 /** Read line by line of _domain file and _eq to setup the equation **/
@@ -126,6 +133,12 @@ EqDataPkg setup_equation(char prefix [])
     {
         printf("\n\nWrong number of parameters or bad format in %s", fname);
         exit(EXIT_FAILURE);
+    }
+
+    if (num_species == 1)
+    {
+        frac_b = 0.0;
+        frac_a = 1.0;
     }
 
     return equation_structure(
@@ -238,7 +251,8 @@ int main(int argc, char * argv[])
         N,
         i,
         j,
-        k;
+        k,
+        num_species;
     double
         start,      // start trigger to measure time
         time_used;  // Time used in calling evolution routine
@@ -271,23 +285,35 @@ int main(int argc, char * argv[])
         switch (i)
         {
             case 1:
-                fscanf(txt_file_ptr, "%s", infname);
+                fscanf(txt_file_ptr, "%d", &num_species);
                 i = i + 1;
                 break;
             case 2:
+                fscanf(txt_file_ptr, "%s", infname);
+                i = i + 1;
+                break;
+            case 3:
                 fscanf(txt_file_ptr, "%s", outfname);
                 break;
         }
         ReachNewLine(txt_file_ptr);
     }
-    if (i != 2)
-    {
-        printf("\n\nWrong number of parameter read from job.conf file\n\n");
-        exit(EXIT_FAILURE);
-    }
 
     fclose(txt_file_ptr);
 
+    if (i != 3)
+    {
+        printf("\nWrong number of parameter read from job.conf file\n\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (num_species < 1 || num_species > 2)
+    {
+        printf("\nInvalid number of species %d in job.conf\n\n", num_species);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("\n\nImaginary time propagation for %d species", num_species);
 
     printf("\n\n");
     printf("\t\t**********************************************\n");
@@ -297,7 +323,7 @@ int main(int argc, char * argv[])
     printf("\t\t**********************************************\n");
 
     // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
-    EQ = setup_equation(infname);
+    EQ = setup_equation(infname, num_species);
 
     // configure initial condition
     Sa = carrDef(EQ->nphi * EQ->ntheta);
@@ -307,14 +333,15 @@ int main(int argc, char * argv[])
     // save equation parameters in output file
     strcpy(fname, "output/");
     strcat(fname, outfname);
-    strcat(fname, "_equation_imagtime.dat");
+    if (num_species == 1) strcat(fname, "_1species_equation_imagtime.dat");
+    else                  strcat(fname, "_2species_equation_imagtime.dat");
     txt_file_ptr = fopen(fname, "w");
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
         exit(EXIT_FAILURE);
     }
-    save_equation_setup(txt_file_ptr, EQ);
+    save_equation_setup(txt_file_ptr, EQ, num_species);
     fclose(txt_file_ptr);
 
     printf("\n\n\n\n");
@@ -337,23 +364,37 @@ int main(int argc, char * argv[])
     printf("%d grid points with spacing = %.3lf\n", EQ->ntheta, EQ->dtheta);
     printf("\nFinal time %.2lf in steps of %.6lf\n", EQ->nt*EQ->dt, EQ->dt);
 
-    /*  ===============================================================
-     
-                             CALL INTEGRATION ROUTINE
-     
-        ===============================================================  */
+    printf("\n\n\n\n");
+    printf("\t\t*********************************************\n");
+    printf("\t\t*                                           *\n");
+    printf("\t\t*         START INTEGRATION ROUTINE         *\n");
+    printf("\t\t*                                           *\n");
+    printf("\t\t*********************************************\n");
 
-    N = splitstep_spherical_shell(EQ, Sa, Sb);
+    if (num_species == 2)
+    {
+        N = splitstep_spherical_shell(EQ, Sa, Sb);
 
-    // Record data
-    strcpy(fname, "output/");
-    strcat(fname, outfname);
-    strcat(fname, "_final_speciesA_imagtime.dat");
-    carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
-    strcpy(fname, "output/");
-    strcat(fname, outfname);
-    strcat(fname, "_final_speciesB_imagtime.dat");
-    carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
+        // Record data
+        strcpy(fname, "output/");
+        strcat(fname, outfname);
+        strcat(fname, "_speciesA_imagtime.dat");
+        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+        strcpy(fname, "output/");
+        strcat(fname, outfname);
+        strcat(fname, "_speciesB_imagtime.dat");
+        carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
+    }
+    else
+    {
+        N = splitstep_spherical_shell_single(EQ, Sa);
+
+        // Record data
+        strcpy(fname, "output/");
+        strcat(fname, outfname);
+        strcat(fname, "_state_imagtime.dat");
+        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+    }
 
     free(Sa);
     free(Sb);

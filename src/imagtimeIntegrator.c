@@ -27,6 +27,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         size;
     double
         d,
+        omega,
         nabla_coef,
         sin_th,
         cot_th,
@@ -43,6 +44,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
     size = EQ->ntheta;
     theta = EQ->theta;
     nabla_coef = EQ->nabla_coef;
+    omega = EQ->omega;
     azi_num_sq = azi_num * azi_num;
 
     // set the core points not influenced by the boundaries
@@ -55,6 +57,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         cn_psi[i] = (I * psi[i]
                 + 0.5 * idt * nabla_coef * (second_der + cot_th * first_der
                 - psi[i] * azi_num_sq / sin_th / sin_th)
+                - psi[i] * idt * omega * azi_num
         );
     }
 
@@ -103,6 +106,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         cn_psi[i] = (I * psi[i]
                 + 0.5 * idt * nabla_coef * (second_der + cot_th * first_der
                 - psi[i] * azi_num_sq / sin_th / sin_th)
+                - psi[i] * idt * omega * azi_num
         );
 
         i = size - 2;
@@ -113,6 +117,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         cn_psi[i] = (I * psi[i]
                 + 0.5 * idt * nabla_coef * (second_der + cot_th * first_der
                 - psi[i] * azi_num_sq / sin_th / sin_th)
+                - psi[i] * idt * omega * azi_num
         );
 
         cn_psi[0] = 0.0 + 0.0 * I;
@@ -177,6 +182,245 @@ void _set_psi_theta(int ntheta, int nphi, int phi_fft_index,
 }
 
 
+int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
+{
+
+    int
+        m,
+        l,
+        j,
+        k,
+        nphi,
+        ntheta,
+        grid_points,
+        display_info_stride;
+    double
+        mu,
+        energy,
+        kin_energy,
+        sin_sq,
+        azi_sq,
+        dphi,
+        dtheta,
+        nabla_coef,
+        omega,
+        g,
+        Idt,
+        norm;
+    double complex
+        dt;
+    Cmatrix
+        mid;
+    Carray
+        inter_evol_op,
+        phi_fft,
+        upper,
+        lower,
+        upper_m0,
+        lower_m0,
+        psi_th,
+        cn_psi_th,
+        cn_solution;
+    Rarray
+        azi,
+        theta,
+        abs_square,
+        inter_pot;
+
+    dt  = - I * EQ->dt;
+    Idt = - EQ->dt;
+
+    if (EQ->nt > 1000) display_info_stride = (EQ->nt / 1000);
+    else               display_info_stride = 1;
+
+    norm = 1.0;
+    nphi = EQ->nphi;
+    ntheta = EQ->ntheta;
+    grid_points = nphi * ntheta;
+    dphi = EQ->dphi;
+    dtheta = EQ->dtheta;
+    nabla_coef = EQ->nabla_coef;
+    omega = EQ->omega;
+    g = EQ->ga;
+    theta = EQ->theta;
+
+    abs_square = rarrDef(grid_points);      // |Psi|^2
+    inter_pot = rarrDef(grid_points);       // interaction potential
+    inter_evol_op = carrDef(grid_points);   // exp[-i * dt/2 * inter_pot]
+    phi_fft = carrDef(grid_points);         // FFT with respect to phi
+    azi = rarrDef(nphi - 1);                // FFT frequencies/azimuthal number
+    psi_th = carrDef(ntheta);               // fixed phi value
+    cn_psi_th = carrDef(ntheta);            // Crank-Nicolson explict part
+    cn_solution = carrDef(ntheta);          // solution of tridiagonal system
+
+    // Arrays in tridiagonal system from Crank-Nicolson method for theta
+    // As for m = 0 we have different boundary conditions, the upper and
+    // lower arrays of tridiagonal matrix change in size and last elements
+    upper = carrDef(ntheta - 3);
+    lower = carrDef(ntheta - 3);
+    upper_m0 = carrDef(ntheta - 1);
+    lower_m0 = carrDef(ntheta - 1);
+
+    // the diagonal change for all azimuthal numbers
+    mid = cmatDef(nphi - 1, ntheta);
+
+    // setup descriptor - MKL implementation of FFT
+    // `l`enght of FFT vector must ignore phi = 2 * PI (boundary)
+    l = nphi - 1;
+    DFTI_DESCRIPTOR_HANDLE desc;
+    m = DftiCreateDescriptor(&desc, DFTI_DOUBLE, DFTI_COMPLEX, 1, l);
+    m = DftiSetValue(desc, DFTI_FORWARD_SCALE, 1.0 / sqrt(l));
+    m = DftiSetValue(desc, DFTI_BACKWARD_SCALE, 1.0 / sqrt(l));
+    m = DftiCommitDescriptor(desc);
+
+    // Fourier Frequencies = azimutal quantum numbers = integers
+    // the first frequency/azimuthal number is aways zero
+    for (m = 0; m < l; m++)
+    {
+        if (m <= (l - 1) / 2) azi[m] = m;
+        else                  azi[m] = m - l;
+    }
+
+    // Crank-Nicolson implicit scheme for theta in phi-momentum space
+    // note there are `nphi - 1` azimuthal numbers. m = 0 must be set
+    // separately as the boundary condition change.
+    for (m = 1; m < nphi - 1; m++)
+    {
+        azi_sq = azi[m] * azi[m];
+        for (j = 0; j < ntheta - 2; j++)
+        {
+            sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
+            mid[m][j] = (I + nabla_coef * dt *
+                    (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi[m]
+            );
+        }
+    }
+    for (j = 0; j < ntheta; j++)
+    {
+        mid[0][j] = I + nabla_coef * dt / dtheta / dtheta;
+    }
+
+    // set off-diagonals for general m != 0
+    for (j = 1; j < ntheta - 2; j++)
+    {
+        upper[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+        );
+        lower[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                + 0.25 * cos(theta[j + 1]) / sin(theta[j + 1]) / dtheta
+        );
+    }
+
+    // set off-diagonals for m = 0
+    for (j = 1; j < ntheta - 1; j++)
+    {
+        upper_m0[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+        );
+        lower_m0[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                + 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+        );
+    }
+    upper_m0[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+    lower_m0[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+
+    printf("\n\nProgrs  Energy       Kinect");
+    printf("       mu_a         mu_b         overlap");
+    sepline();
+
+    // Start time evolution
+    for (k = 0; k < EQ->nt; k++)
+    {
+        carrAbs2(grid_points, S, abs_square);
+
+        rarrScalarMultiply(grid_points, abs_square, g, inter_pot);
+        rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(grid_points, inter_evol_op, S, phi_fft);
+
+        // go to momentum space in phi axis. For a fixed theta there is
+        // a stride corresponding to phi varying from 0 to 2*PI  though
+        // the point 2*PI is ignore due to periodic boundary condition.
+        for (j = 0; j < ntheta; j++)
+        {
+            m = DftiComputeForward(desc, &phi_fft[j*nphi]);
+        }
+
+        for (j = 0; j < nphi - 1; j++)
+        {
+            _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
+            _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
+            if (j == 0)
+            {
+                triDiag(ntheta, upper_m0, lower_m0, mid[0],
+                        cn_psi_th, cn_solution
+                );
+            }
+            else
+            {
+                triDiag(ntheta - 2, upper, lower, mid[j],
+                        &cn_psi_th[1], &cn_solution[1]
+                );
+                cn_solution[0] = 0.0 + 0.0 * I;
+                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
+            }
+            _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+        }
+
+        // return to spatial coordinates in phi axis
+        for (j = 0; j < ntheta; j++)
+        {
+            m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
+        }
+
+        // set periodic boundary at phi = 2 * Pi
+        carrCopy(grid_points, phi_fft, S);
+        for (j = 0; j < ntheta; j++)
+        {
+            S[j * nphi + nphi - 1] = S[j * nphi];
+        }
+
+        // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
+
+        // use `phi_fft` as workspace array
+        carrCopy(grid_points, S, phi_fft);
+        carrAbs2(grid_points, S, abs_square);
+        rarrScalarMultiply(grid_points, abs_square, g, inter_pot);
+        rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(grid_points, inter_evol_op, phi_fft, S);
+
+        // Renormalize
+        renormalize_spheric(EQ, S);
+
+        if ( (k + 1) % (display_info_stride) == 0 )
+        {
+            printf("%5.1lf%%",(100.0 * k) / EQ->nt);
+            energy = functionals_single(EQ, S, &kin_energy, &mu);
+            printf("  %11.8lf  %11.8lf  %11.8lf\n", energy, kin_energy, mu);
+        }
+
+    }
+
+    free(inter_evol_op);
+    free(phi_fft);
+    free(abs_square);
+    free(azi);
+    free(upper);
+    free(lower);
+    free(upper_m0);
+    free(lower_m0);
+    free(inter_pot);
+    free(psi_th);
+    free(cn_psi_th);
+    free(cn_solution);
+    cmatFree(nphi - 1, mid);
+
+    m = DftiFreeDescriptor(&desc);
+
+    return EQ->nt + 1;
+}
+
+
 int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 {
 
@@ -218,6 +462,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         dphi,
         dtheta,
         nabla_coef,
+        omega,
         frac_a,
         frac_b,
         ga,
@@ -260,6 +505,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     dphi = EQ->dphi;
     dtheta = EQ->dtheta;
     nabla_coef = EQ->nabla_coef;
+    omega = EQ->omega;
     frac_a = EQ->frac_a;
     frac_b = EQ->frac_b;
     ga = EQ->ga;
@@ -316,6 +562,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
             mid[m][j] = (I + nabla_coef * dt *
                     (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi[m]
             );
         }
     }

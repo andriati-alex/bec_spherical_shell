@@ -8,4 +8,6 @@
 
 int splitstep_spherical_shell(EqDataPkg, Carray, Carray);
 
+int splitstep_spherical_shell_single(EqDataPkg, Carray);
+
 #endif

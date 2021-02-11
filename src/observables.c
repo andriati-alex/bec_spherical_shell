@@ -89,6 +89,81 @@ void abs_grad_sphere_square(
 }
 
 
+double functionals_single(
+        EqDataPkg EQ, Carray state, double * kin, double * mu)
+{
+
+    int
+        j,
+        i,
+        nphi,
+        ntheta,
+        grid_points;
+    double
+        total_energy,
+        g,
+        dphi,
+        nabla_coef;
+    Rarray
+        theta,
+        Integ_energy,
+        Integ_kin,
+        Integ_mu,
+        abs_grad_square,
+        abs_square;
+
+    nphi = EQ->nphi;
+    dphi = EQ->dphi;
+    ntheta = EQ->ntheta;
+    theta = EQ->theta;
+    g = EQ->ga;
+    nabla_coef = EQ->nabla_coef;
+    grid_points = nphi * ntheta;
+
+    Integ_energy = rarrDef(grid_points);
+    Integ_kin = rarrDef(grid_points);
+    Integ_mu = rarrDef(grid_points);
+    abs_square = rarrDef(grid_points);
+    abs_grad_square = rarrDef(grid_points);
+
+    carrAbs2(grid_points, state, abs_square);
+    abs_grad_sphere_square(nphi, ntheta, dphi, theta, state, abs_grad_square);
+
+    // Setup function to integrate
+    for (j = 0; j < ntheta; j++)
+    {
+        for (i = 0; i < nphi; i++)
+        {
+            Integ_kin[j * nphi + i] = (
+                    - nabla_coef * abs_grad_square[j * nphi + i]
+            );
+            Integ_mu[j * nphi + i] = (
+                    - nabla_coef * abs_grad_square[j * nphi + i]
+                    + g * (abs_square[j * nphi + i]
+                    * abs_square[j * nphi + i])
+            );
+            Integ_energy[j * nphi + i] = (
+                    - nabla_coef * abs_grad_square[j * nphi + i]
+                    + 0.5 * g * (abs_square[j * nphi + i]
+                    * abs_square[j * nphi + i])
+            );
+        }
+    }
+
+    total_energy = Rsimps2D_sphere(nphi, ntheta, theta, Integ_energy, dphi);
+    (* kin) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_kin, dphi);
+    (* mu) = Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu, dphi);
+
+    free(abs_grad_square);
+    free(abs_square);
+    free(Integ_mu);
+    free(Integ_kin);
+    free(Integ_energy);
+
+    return total_energy;
+}
+
+
 double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
         double * kin, double * mu_a, double * mu_b)
 {

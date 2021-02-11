@@ -3,6 +3,8 @@
 
 #include "calculus.h"
 
+double functionals_single(EqDataPkg, Carray, double *, double *);
+
 double functionals(EqDataPkg, Carray, Carray, double *, double *, double *);
 
 double density_overlap(EqDataPkg, Rarray, Rarray);
