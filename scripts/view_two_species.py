@@ -100,9 +100,12 @@ class DensityPlot:
         self.__mayavi_sphere(self.abs_square_b, offset=(2.5, 0.0, 0.0))
         mlab.show()
 
-    def __mayavi_sphere(self, den, radius=1, offset=(0, 0, 0), cmap="jet"):
+    def __mayavi_sphere(self, den, radius=1, offset=(0, 0, 0), cmap="hot"):
         x, y, z = self.__cartesian_grid(radius, offset)
-        mlab.mesh(x, y, z, scalars=den, colormap=cmap)
+        if self.__density_contrast(den) < 0.1:
+            mlab.mesh(x, y, z, color=(1, 0, 0))
+        else:
+            mlab.mesh(x, y, z, scalars=den, colormap=cmap)
 
     def __cartesian_grid(self, radius=1, offset=(0, 0, 0)):
         phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
@@ -201,12 +204,15 @@ class DensityPlot:
 def run(data_path, prefix, view_tool, view_mode):
     data_plotting = DensityPlot(data_path, prefix)
     if view_tool == "matplotlib":
-        if view_mode == "one-sphere":
+        if view_mode == 1:
             data_plotting.show_in_one_sphere()
         else:
             data_plotting.show_in_two_spheres()
     else:
-        data_plotting.show_mayavi_oriented()
+        if view_mode == 1:
+            data_plotting.show_mayavi_oriented()
+        else:
+            data_plotting.show_mayavi_raw()
     del data_plotting
 
 
@@ -238,9 +244,12 @@ if __name__ == "__main__":
     p.add_argument(
         "--view-mode",
         dest="view_mode",
-        type=str,
-        default="one-sphere",
-        help="Whether to plot color-scale densities in one or two spheres.",
+        type=int,
+        default=1,
+        help="1 matplotlib : red and blue alpha channels\n"
+        "2 matplotlib : separate sphere with colormaps\n"
+        "1 mayavi : spheres aligned according to max-min axis\n"
+        "2 mayavi : spheres along x-axis",
     )
     args = p.parse_args()
     run(**vars(args))
