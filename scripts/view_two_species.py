@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mayavi import mlab
+from numpy import pi, sqrt
 
 mpl.rcParams["text.usetex"] = True
 mpl.rcParams["figure.subplot.hspace"] = 0.0
@@ -13,6 +15,9 @@ mpl.rcParams["figure.subplot.wspace"] = 0.0
 class DensityPlot:
     def __init__(self, data_path, prefix, view_tool="matplotlib"):
         file_prefix = os.path.join(data_path, prefix)
+        eq_filename = file_prefix + "_2species_equation_imagtime.dat"
+        if not os.path.isfile(eq_filename):
+            raise IOError("\nEquation file {} not found\n".format(eq_filename))
         eq_data = np.loadtxt(file_prefix + "_2species_equation_imagtime.dat")
         self.phi = np.linspace(0, 2 * np.pi, int(eq_data[0]))
         self.theta = np.linspace(0, np.pi, int(eq_data[1]))
@@ -41,7 +46,7 @@ class DensityPlot:
         surf_a = self.__plot_rgba_sphere(ax, 1.0, colors_a)
         surf_b = self.__plot_rgba_sphere(ax, 1.0, colors_b)
         ax.set_axis_off()
-        self.__set_view_angle(ax)
+        self.__set_view_angle_mpl(ax)
         plt.show()
 
     def show_in_two_spheres(self):
@@ -56,12 +61,55 @@ class DensityPlot:
         plt.show()
         # plt.savefig("teste.png", dpi=1024, bbox_inches="tight")
 
-    def __cartesian_grid(self, radius):
+    def show_mayavi_oriented(self):
+        mlab.figure(
+            1,
+            bgcolor=(1.0, 1.0, 1.0),
+            fgcolor=(0.0, 0.0, 0.0),
+            size=(1100, 600),
+        )
+        mlab.clf()
+        phi_den_max, theta_den_max = self.__max_density_angles()
+        max_den_direction = np.array(
+            [
+                np.sin(theta_den_max) * np.cos(phi_den_max),
+                np.sin(theta_den_max) * np.sin(phi_den_max),
+                np.cos(theta_den_max),
+            ]
+        )
+        self.__set_view_angle_mayavi()
+        self.__mayavi_sphere(self.abs_square_a)
+        camera_position, focus_position = mlab.move()
+        cross_vec = np.cross(camera_position, max_den_direction)
+        offset_second_sphere = (
+            2.5 * cross_vec / sqrt((abs(cross_vec) ** 2).sum())
+        )
+        self.__mayavi_sphere(self.abs_square_b, offset=offset_second_sphere)
+        mlab.show()
+
+    def show_mayavi_raw(self):
+        mlab.figure(
+            1,
+            bgcolor=(1.0, 1.0, 1.0),
+            fgcolor=(0.0, 0.0, 0.0),
+            size=(1100, 600),
+        )
+        mlab.clf()
+        mlab.view(azimuth=pi, elevation=pi / 2)
+        self.__mayavi_sphere(self.abs_square_a)
+        self.__mayavi_sphere(self.abs_square_b, offset=(2.5, 0.0, 0.0))
+        mlab.show()
+
+    def __mayavi_sphere(self, den, radius=1, offset=(0, 0, 0), cmap="jet"):
+        x, y, z = self.__cartesian_grid(radius, offset)
+        mlab.mesh(x, y, z, scalars=den, colormap=cmap)
+
+    def __cartesian_grid(self, radius=1, offset=(0, 0, 0)):
         phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
         # sphere of unit radius
-        x = radius * np.sin(tht_grid) * np.cos(phi_grid)
-        y = radius * np.sin(tht_grid) * np.sin(phi_grid)
-        z = radius * np.cos(tht_grid)
+        x = radius * np.sin(tht_grid) * np.cos(phi_grid) + offset[0]
+        y = radius * np.sin(tht_grid) * np.sin(phi_grid) + offset[1]
+        z = radius * np.cos(tht_grid) + offset[2]
         return (x, y, z)
 
     def __density_contrast(self, den):
@@ -70,15 +118,25 @@ class DensityPlot:
     def __normalize_density(self, den):
         return (den - den.min()) / (den.max() - den.min())
 
-    def __set_view_angle(self, ax):
+    def __max_density_angles(self):
         stride = self.abs_square_a.argmax()
         i, j = int(stride / self.theta.size), stride % self.phi.size
-        if self.theta[i] < np.pi / 2:
-            elevation = -self.theta[i] * 180.0 / np.pi
-        else:
-            elevation = self.theta[i] * 180.0 / np.pi - 90.0
-        rotation = self.phi[j] * 180.0 / np.pi
+        return self.phi[j], self.theta[i]
+
+    def __set_view_angle_mpl(self, ax):
+        phi_den_max, theta_den_max = self.__max_density_angles()
+        elevation = -theta_den_max * 180.0 / np.pi
+        rotation = phi_den_max * 180.0 / np.pi
         ax.view_init(elev=elevation, azim=rotation)
+
+    def __set_view_angle_mayavi(self):
+        phi_den_max, theta_den_max = self.__max_density_angles()
+        if theta_den_max < np.pi / 2:
+            elevation = theta_den_max * 180.0 / np.pi + 90
+        else:
+            elevation = theta_den_max * 180.0 / np.pi - 90
+        rotation = phi_den_max * 180.0 / np.pi
+        mlab.view(elevation=elevation, azimuth=rotation)
 
     def __rgba_colors(self, main_color, abs_square, contrast_threshold=0.10):
         if main_color == "red":
@@ -131,7 +189,7 @@ class DensityPlot:
             antialiased=False,
         )
         ax.set_axis_off()
-        self.__set_view_angle(ax)
+        self.__set_view_angle_mpl(ax)
         cmap_norm = mpl.colors.Normalize(vmin=den.min(), vmax=den.max())
         fig.colorbar(
             mpl.cm.ScalarMappable(cmap=mpl.cm.jet, norm=cmap_norm),
@@ -142,10 +200,13 @@ class DensityPlot:
 
 def run(data_path, prefix, view_tool, view_mode):
     data_plotting = DensityPlot(data_path, prefix)
-    if view_mode == "one-sphere":
-        data_plotting.show_in_one_sphere()
+    if view_tool == "matplotlib":
+        if view_mode == "one-sphere":
+            data_plotting.show_in_one_sphere()
+        else:
+            data_plotting.show_in_two_spheres()
     else:
-        data_plotting.show_in_two_spheres()
+        data_plotting.show_mayavi_oriented()
     del data_plotting
 
 

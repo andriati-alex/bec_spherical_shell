@@ -206,8 +206,7 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         nabla_coef,
         omega,
         g,
-        Idt,
-        norm;
+        Idt;
     double complex
         dt;
     Cmatrix
@@ -234,7 +233,6 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
     if (EQ->nt > 1000) display_info_stride = (EQ->nt / 1000);
     else               display_info_stride = 1;
 
-    norm = 1.0;
     nphi = EQ->nphi;
     ntheta = EQ->ntheta;
     grid_points = nphi * ntheta;
@@ -327,7 +325,7 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
     lower_m0[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
 
     printf("\n\nProgrs  Energy       Kinect");
-    printf("       mu_a         mu_b         overlap");
+    printf("       mu         lz");
     sepline();
 
     // Start time evolution
@@ -475,7 +473,6 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         gb,
         gab,
         Idt,
-        norm,
         den_overlap;
     double complex
         dt;
@@ -504,7 +501,6 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     if (EQ->nt > 1000) display_info_stride = (EQ->nt / 1000);
     else               display_info_stride = 1;
 
-    norm = 1.0;
     nphi = EQ->nphi;
     ntheta = EQ->ntheta;
     grid_points = nphi * ntheta;
