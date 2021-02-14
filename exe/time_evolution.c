@@ -246,13 +246,12 @@ int main(int argc, char * argv[])
      *  --------------------------------------------------------------- */
 
     // omp_set_num_threads(omp_get_max_threads() / 2);
+    omp_set_num_threads(1);
     mkl_set_num_threads(1);
 
     int
         N,
         i,
-        j,
-        k,
         num_species;
     double
         start,      // start trigger to measure time
@@ -372,6 +371,8 @@ int main(int argc, char * argv[])
     printf("\t\t*                                           *\n");
     printf("\t\t*********************************************\n");
 
+    start = omp_get_wtime();
+
     if (num_species == 2)
     {
         N = splitstep_spherical_shell(EQ, Sa, Sb);
@@ -396,6 +397,11 @@ int main(int argc, char * argv[])
         strcat(fname, "_state_imagtime.dat");
         carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
     }
+
+    time_used = (double) (omp_get_wtime() - start);
+    printf("\n\nTime elapsed in time evolution of %d steps", N);
+    printf(" : %.0lf sec = ",time_used);
+    TimePrint(time_used);
 
     free(Sa);
     free(Sb);
