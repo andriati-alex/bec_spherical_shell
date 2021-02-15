@@ -122,7 +122,7 @@ double complex Csimps2D(int nx, int ny, Carray f, double hx, double hy)
 
     fy = carrDef(ny);
 
-#pragma omp parallel for private(j) schedule(static)
+    #pragma omp parallel for private(j) schedule(static)
     for (j = 0; j < ny; j++)
     {
         // Integrate in x-direction and end up with a function of y
@@ -166,7 +166,7 @@ double Rsimps2D(int nx, int ny, Rarray f, double hx, double hy)
 
     fy = rarrDef(ny);
 
-#pragma omp parallel for private(j) schedule(static)
+    #pragma omp parallel for private(j) schedule(static)
     for (j = 0; j < ny; j++)
     {
         // Integrate in x-direction and end up with a function of y
@@ -199,7 +199,7 @@ double Rsimps2D_sphere(
     dtheta = theta[1] - theta[0];
     f_theta = rarrDef(ntheta);
 
-//  #pragma omp parallel for private(j) schedule(static)
+    #pragma omp parallel for private(j) schedule(static)
     for (j = 0; j < ntheta; j++)
     {
         // Integrate in phi and multiply by the jacobian term sin(theta)
@@ -231,7 +231,7 @@ double complex Csimps2D_sphere(
     dtheta = theta[1] - theta[0];
     f_theta = carrDef(ntheta);
 
-//  #pragma omp parallel for private(j) schedule(static)
+    #pragma omp parallel for private(j) schedule(static)
     for (j = 0; j < ntheta; j++)
     {
         // Integrate in phi and multiply by the jacobian term sin(theta)
