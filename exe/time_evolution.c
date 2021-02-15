@@ -246,7 +246,7 @@ int main(int argc, char * argv[])
      *  --------------------------------------------------------------- */
 
     // omp_set_num_threads(omp_get_max_threads() / 2);
-    omp_set_num_threads(1);
+    omp_set_num_threads(4);
     mkl_set_num_threads(1);
 
     int

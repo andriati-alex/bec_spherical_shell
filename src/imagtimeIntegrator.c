@@ -359,6 +359,7 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         // go to momentum space in phi axis. For a fixed theta there is
         // a stride corresponding to phi varying from 0 to 2*PI  though
         // the point 2*PI is ignore due to periodic boundary condition.
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeForward(desc, &phi_fft[j*nphi]);
@@ -374,19 +375,43 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
         // Solve for azimuthal number != 0
-        for (j = 1; j < nphi - 1; j++)
+
+        free(psi_th);
+        free(cn_psi_th);
+        free(cn_solution);
+        free(aux_workspace);
+#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
         {
-            _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-            _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-            tridiag_lu(
-                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-            cn_solution[0] = 0.0 + 0.0 * I;
-            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-            _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            psi_th = carrDef(ntheta);
+            cn_psi_th = carrDef(ntheta);
+            cn_solution = carrDef(ntheta);
+            aux_workspace = carrDef(ntheta);
+
+            #pragma omp for schedule(static)
+            for (j = 1; j < nphi - 1; j++)
+            {
+                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
+                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
+                tridiag_lu(
+                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+                cn_solution[0] = 0.0 + 0.0 * I;
+                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
+                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            }
+
+            free(psi_th);
+            free(cn_psi_th);
+            free(cn_solution);
+            free(aux_workspace);
         }
+        psi_th = carrDef(ntheta);
+        cn_psi_th = carrDef(ntheta);
+        cn_solution = carrDef(ntheta);
+        aux_workspace = carrDef(ntheta);
 
         // return to spatial coordinates in phi axis
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
@@ -663,6 +688,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         // go to momentum space in phi axis. For a fixed theta there is
         // a stride corresponding to phi varying from 0 to 2*PI  though
         // the point 2*PI is ignore due to periodic boundary condition.
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeForward(desc, &phi_fft[j*nphi]);
@@ -678,19 +704,43 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
         // Solve for azimuthal number != 0
-        for (j = 1; j < nphi - 1; j++)
+
+        free(psi_th);
+        free(cn_psi_th);
+        free(cn_solution);
+        free(aux_workspace);
+#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
         {
-            _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-            _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-            tridiag_lu(
-                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-            cn_solution[0] = 0.0 + 0.0 * I;
-            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-            _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            psi_th = carrDef(ntheta);
+            cn_psi_th = carrDef(ntheta);
+            cn_solution = carrDef(ntheta);
+            aux_workspace = carrDef(ntheta);
+
+            #pragma omp for schedule(static)
+            for (j = 1; j < nphi - 1; j++)
+            {
+                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
+                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
+                tridiag_lu(
+                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+                cn_solution[0] = 0.0 + 0.0 * I;
+                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
+                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            }
+
+            free(psi_th);
+            free(cn_psi_th);
+            free(cn_solution);
+            free(aux_workspace);
         }
+        psi_th = carrDef(ntheta);
+        cn_psi_th = carrDef(ntheta);
+        cn_solution = carrDef(ntheta);
+        aux_workspace = carrDef(ntheta);
 
         // return to spatial coordinates in phi axis
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
@@ -716,6 +766,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 
         // go to momentum space in phi axis. For a fixed theta there is
         // a stride corresponding to phi varying from 0 to 2*PI
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeForward(desc, &phi_fft[j*nphi]);
@@ -730,20 +781,43 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         );
         _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
+        free(psi_th);
+        free(cn_psi_th);
+        free(cn_solution);
+        free(aux_workspace);
+
         // Solve for azimuthal number != 0
-        for (j = 1; j < nphi - 1; j++)
+#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
         {
-            _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-            _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-            tridiag_lu(
-                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-            cn_solution[0] = 0.0 + 0.0 * I;
-            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-            _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            psi_th = carrDef(ntheta);
+            cn_psi_th = carrDef(ntheta);
+            cn_solution = carrDef(ntheta);
+            aux_workspace = carrDef(ntheta);
+
+            for (j = 1; j < nphi - 1; j++)
+            {
+                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
+                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
+                tridiag_lu(
+                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+                cn_solution[0] = 0.0 + 0.0 * I;
+                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
+                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+            }
+
+            free(psi_th);
+            free(cn_psi_th);
+            free(cn_solution);
+            free(aux_workspace);
         }
+        psi_th = carrDef(ntheta);
+        cn_psi_th = carrDef(ntheta);
+        cn_solution = carrDef(ntheta);
+        aux_workspace = carrDef(ntheta);
 
         // return to spatial coordinates in phi axis
+        #pragma omp parallel for private(j,m)
         for (j = 0; j < ntheta; j++)
         {
             m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
