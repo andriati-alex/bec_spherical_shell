@@ -2,7 +2,7 @@
 
 
 
-void triDiag(int n, Carray upper, Carray lower, Carray mid, Carray RHS,
+void tridiag(int n, Carray upper, Carray lower, Carray mid, Carray RHS,
      Carray ans)
 {
 
@@ -102,4 +102,48 @@ void triDiag(int n, Carray upper, Carray lower, Carray mid, Carray RHS,
     free(u);
     free(l);
     free(z);
+}
+
+
+void lu_decomposition(
+        int n, Carray upper, Carray lower, Carray mid, Carray l, Carray u)
+{
+
+/** Compute vectors of LU decomposition for tridigonal system **/
+
+    unsigned int
+        i;
+
+    u[0] = mid[0];
+    for (i = 0;  i < n - 1; i++)
+    {
+        l[i] = lower[i] / u[i];
+        u[i + 1] = mid[i + 1] - l[i] * upper[i];
+    }
+
+}
+
+
+void tridiag_lu(
+        int n, Carray upper, Carray l, Carray u, Carray z,
+        Carray RHS, Carray ans)
+{
+
+/** Improved routine to solve tridiagonal system given lu-decomposition **/
+
+    int
+        i;
+
+    z[0] = RHS[0];
+
+    for (i = 0;  i < n - 1; i++)
+    {
+        z[i + 1] = RHS[i + 1] - l[i] * z[i];
+    }
+
+    ans[n-1] = z[n-1] / u[n-1];
+    for (i = n - 2; i >= 0; i--)
+    {
+        ans[i] = (z[i] - upper[i] * ans[i + 1]) / u[i];
+    }
 }

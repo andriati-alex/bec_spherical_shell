@@ -351,13 +351,13 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
             _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
             if (j == 0)
             {
-                triDiag(ntheta, upper_m0, lower_m0, mid[0],
+                tridiag(ntheta, upper_m0, lower_m0, mid[0],
                         cn_psi_th, cn_solution
                 );
             }
             else
             {
-                triDiag(ntheta - 2, upper, lower, mid[j],
+                tridiag(ntheta - 2, upper, lower, mid[j],
                         &cn_psi_th[1], &cn_solution[1]
                 );
                 cn_solution[0] = 0.0 + 0.0 * I;
@@ -477,6 +477,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     double complex
         dt;
     Cmatrix
+        l_decomp,
+        u_decomp,
         mid;
     Carray
         inter_evol_op,
@@ -487,7 +489,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         lower_m0,
         psi_th,
         cn_psi_th,
-        cn_solution;
+        cn_solution,
+        aux_workspace;
     Rarray
         azi,
         theta,
@@ -524,6 +527,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     psi_th = carrDef(ntheta);               // fixed phi value
     cn_psi_th = carrDef(ntheta);            // Crank-Nicolson explict part
     cn_solution = carrDef(ntheta);          // solution of tridiagonal system
+    aux_workspace = carrDef(ntheta);
 
     // Arrays in tridiagonal system from Crank-Nicolson method for theta
     // As for m = 0 we have different boundary conditions, the upper and
@@ -535,6 +539,10 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 
     // the diagonal change for all azimuthal numbers
     mid = cmatDef(nphi - 1, ntheta);
+
+    // Corresponding LU decomposition
+    l_decomp = cmatDef(nphi - 1, ntheta);
+    u_decomp = cmatDef(nphi - 1, ntheta);
 
     // setup descriptor - MKL implementation of FFT
     // `l`enght of FFT vector must ignore phi = 2 * PI (boundary)
@@ -597,6 +605,16 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     upper_m0[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
     lower_m0[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
 
+    lu_decomposition(
+            ntheta, upper_m0, lower_m0, mid[0], l_decomp[0], u_decomp[0]
+    );
+    for (j = 1; j < nphi - 1; j++)
+    {
+        lu_decomposition(
+                ntheta - 2, upper, lower, mid[j], l_decomp[j], u_decomp[j]
+        );
+    }
+
     printf("\n\nProgrs  Energy       Kinect");
     printf("       mu_a         mu_b         overlap");
     sepline();
@@ -626,24 +644,25 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             m = DftiComputeForward(desc, &phi_fft[j*nphi]);
         }
 
-        for (j = 0; j < nphi - 1; j++)
+        // Solve for azimuthal number == 0
+        _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
+        _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
+        tridiag_lu(
+                ntheta, upper_m0, l_decomp[0], u_decomp[0],
+                aux_workspace, cn_psi_th, cn_solution
+        );
+        _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
+
+        // Solve for azimuthal number != 0
+        for (j = 1; j < nphi - 1; j++)
         {
             _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
             _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-            if (j == 0)
-            {
-                triDiag(ntheta, upper_m0, lower_m0, mid[0],
-                        cn_psi_th, cn_solution
-                );
-            }
-            else
-            {
-                triDiag(ntheta - 2, upper, lower, mid[j],
-                        &cn_psi_th[1], &cn_solution[1]
-                );
-                cn_solution[0] = 0.0 + 0.0 * I;
-                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-            }
+            tridiag_lu(
+                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+            cn_solution[0] = 0.0 + 0.0 * I;
+            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
             _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
         }
 
@@ -678,24 +697,25 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             m = DftiComputeForward(desc, &phi_fft[j*nphi]);
         }
 
-        for (j = 0; j < nphi - 1; j++)
+        // Solve for azimuthal number == 0
+        _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
+        _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
+        tridiag_lu(
+                ntheta, upper_m0, l_decomp[0], u_decomp[0],
+                aux_workspace, cn_psi_th, cn_solution
+        );
+        _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
+
+        // Solve for azimuthal number != 0
+        for (j = 1; j < nphi - 1; j++)
         {
             _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
             _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-            if (j == 0)
-            {
-                triDiag(ntheta, upper_m0, lower_m0, mid[0],
-                        cn_psi_th, cn_solution
-                );
-            }
-            else
-            {
-                triDiag(ntheta - 2, upper, lower, mid[j],
-                        &cn_psi_th[1], &cn_solution[1]
-                );
-                cn_solution[0] = 0.0 + 0.0 * I;
-                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-            }
+            tridiag_lu(
+                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+            cn_solution[0] = 0.0 + 0.0 * I;
+            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
             _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
         }
 
@@ -773,6 +793,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     free(cn_psi_th);
     free(cn_solution);
     cmatFree(nphi - 1, mid);
+    cmatFree(nphi - 1, l_decomp);
+    cmatFree(nphi - 1, u_decomp);
 
     m = DftiFreeDescriptor(&desc);
 
