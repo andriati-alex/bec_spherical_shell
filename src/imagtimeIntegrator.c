@@ -126,6 +126,34 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
 }
 
 
+void _set_psi_theta(int ntheta, int nphi, int phi_fft_index,
+        Carray psi_th, Carray psi)
+{
+
+/** Fix index of azimuthal quantum number and set function of theta
+    ---------------------------------------------------------------
+    Walk in strides through the vector representation of 2D function
+    setting values for theta axis within fix azimuthal number.
+
+    Output Parameter
+    ----------------
+    `psi`: sizeof(ntheta * nphi) function of theta and phi-FFT
+
+**/
+
+    if (phi_fft_index > nphi - 2)
+    {
+        printf("\n\nInvalid phi-FFT point to fix in _set_psi_theta\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int j = 0; j < ntheta; j++)
+    {
+        psi[j * nphi + phi_fft_index] = psi_th[j];
+    }
+}
+
+
 void _get_psi_theta(
         int ntheta, int nphi, int phi_fft_index, Carray psi, Carray psi_th)
 {
@@ -154,30 +182,83 @@ void _get_psi_theta(
 }
 
 
-void _set_psi_theta(int ntheta, int nphi, int phi_fft_index,
-        Carray psi_th, Carray psi)
+void _propagate_linear(
+        EqDataPkg EQ, Carray upper_m0, Carray upper,
+        Cmatrix l_decomp, Cmatrix u_decomp, Rarray azi,
+        DFTI_DESCRIPTOR_HANDLE desc, Carray phi_fft)
 {
+    int
+        j,
+        nphi,
+        ntheta;
 
-/** Fix index of azimuthal quantum number and set function of theta
-    ---------------------------------------------------------------
-    Walk in strides through the vector representation of 2D function
-    setting values for theta axis within fix azimuthal number.
+    Carray
+        psi_th,
+        cn_psi_th,
+        cn_solution,
+        aux_workspace;
 
-    Output Parameter
-    ----------------
-    `psi`: sizeof(ntheta * nphi) function of theta and phi-FFT
+    nphi = EQ->nphi;
+    ntheta = EQ->ntheta;
 
-**/
-
-    if (phi_fft_index > nphi - 2)
+#pragma omp parallel private(j,psi_th,cn_psi_th,cn_solution,aux_workspace)
     {
-        printf("\n\nInvalid phi-FFT point to fix in _set_psi_theta\n");
-        exit(EXIT_FAILURE);
+        psi_th = carrDef(ntheta);
+        cn_psi_th = carrDef(ntheta);
+        cn_solution = carrDef(ntheta);
+        aux_workspace = carrDef(ntheta);
+
+        #pragma omp for private(j)
+        for (j = 0; j < ntheta; j++)
+        {
+            DftiComputeForward(desc, &phi_fft[j*nphi]);
+        }
+
+        // Solve for azimuthal number == 0
+
+        #pragma omp single
+        {
+            _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
+            _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
+            tridiag_lu(
+                    ntheta, upper_m0, l_decomp[0], u_decomp[0],
+                    aux_workspace, cn_psi_th, cn_solution
+            );
+            _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
+        }
+
+        // Solve for azimuthal number != 0
+
+        #pragma omp for
+        for (j = 1; j < nphi - 1; j++)
+        {
+            _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
+            _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
+            tridiag_lu(
+                    ntheta - 2, upper, l_decomp[j], u_decomp[j],
+                    aux_workspace, &cn_psi_th[1], &cn_solution[1]);
+            cn_solution[0] = 0.0 + 0.0 * I;
+            cn_solution[ntheta-1] = 0.0 + 0.0 * I;
+            _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
+        }
+
+        // return to spatial coordinates in phi axis
+        #pragma omp for
+        for (j = 0; j < ntheta; j++)
+        {
+            DftiComputeBackward(desc, &phi_fft[j*nphi]);
+        }
+
+        free(psi_th);
+        free(cn_psi_th);
+        free(cn_solution);
+        free(aux_workspace);
     }
 
-    for (int j = 0; j < ntheta; j++)
+    // set periodic boundary
+    for (j = 0; j < ntheta; j++)
     {
-        psi[j * nphi + phi_fft_index] = psi_th[j];
+        phi_fft[j * nphi + nphi - 1] = phi_fft[j * nphi];
     }
 }
 
@@ -219,11 +300,7 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
         upper,
         lower,
         upper_m0,
-        lower_m0,
-        psi_th,
-        cn_psi_th,
-        cn_solution,
-        aux_workspace;
+        lower_m0;
     Rarray
         azi,
         theta,
@@ -251,10 +328,6 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
     inter_evol_op = carrDef(grid_points);   // exp[-i * dt/2 * inter_pot]
     phi_fft = carrDef(grid_points);         // FFT with respect to phi
     azi = rarrDef(nphi - 1);                // FFT frequencies/azimuthal number
-    psi_th = carrDef(ntheta);               // fixed phi value
-    cn_psi_th = carrDef(ntheta);            // Crank-Nicolson explict part
-    cn_solution = carrDef(ntheta);          // solution of tridiagonal system
-    aux_workspace = carrDef(ntheta);
 
     // Arrays in tridiagonal system from Crank-Nicolson method for theta
     // As for m = 0 we have different boundary conditions, the upper and
@@ -352,88 +425,27 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
     {
         carrAbs2(grid_points, S, abs_square);
 
+        // half step nonlinear
+
         rarrScalarMultiply(grid_points, abs_square, g, inter_pot);
         rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
         carrMultiply(grid_points, inter_evol_op, S, phi_fft);
 
-        // go to momentum space in phi axis. For a fixed theta there is
-        // a stride corresponding to phi varying from 0 to 2*PI  though
-        // the point 2*PI is ignore due to periodic boundary condition.
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeForward(desc, &phi_fft[j*nphi]);
-        }
+        // entire step linear
 
-        // Solve for azimuthal number == 0
-        _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
-        _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
-        tridiag_lu(
-                ntheta, upper_m0, l_decomp[0], u_decomp[0],
-                aux_workspace, cn_psi_th, cn_solution
+        _propagate_linear(
+                EQ, upper_m0, upper, l_decomp, u_decomp, azi, desc, phi_fft
         );
-        _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
-        // Solve for azimuthal number != 0
+        // another half step nonlinear. Use `phi_fft` as workspace array
 
-        free(psi_th);
-        free(cn_psi_th);
-        free(cn_solution);
-        free(aux_workspace);
-#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
-        {
-            psi_th = carrDef(ntheta);
-            cn_psi_th = carrDef(ntheta);
-            cn_solution = carrDef(ntheta);
-            aux_workspace = carrDef(ntheta);
-
-            #pragma omp for schedule(static)
-            for (j = 1; j < nphi - 1; j++)
-            {
-                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-                tridiag_lu(
-                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-                cn_solution[0] = 0.0 + 0.0 * I;
-                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
-            }
-
-            free(psi_th);
-            free(cn_psi_th);
-            free(cn_solution);
-            free(aux_workspace);
-        }
-        psi_th = carrDef(ntheta);
-        cn_psi_th = carrDef(ntheta);
-        cn_solution = carrDef(ntheta);
-        aux_workspace = carrDef(ntheta);
-
-        // return to spatial coordinates in phi axis
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
-        }
-
-        // set periodic boundary at phi = 2 * Pi
-        carrCopy(grid_points, phi_fft, S);
-        for (j = 0; j < ntheta; j++)
-        {
-            S[j * nphi + nphi - 1] = S[j * nphi];
-        }
-
-        // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
-
-        // use `phi_fft` as workspace array
-        carrCopy(grid_points, S, phi_fft);
-        carrAbs2(grid_points, S, abs_square);
+        carrAbs2(grid_points, phi_fft, abs_square);
         rarrScalarMultiply(grid_points, abs_square, g, inter_pot);
         rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
         carrMultiply(grid_points, inter_evol_op, phi_fft, S);
 
-        // Renormalize
+        // Transfer data and renormalize
+        carrCopy(grid_points, phi_fft, S);
         renormalize_spheric(EQ, S);
 
         if ( (k + 1) % (display_info_stride) == 0 )
@@ -457,10 +469,6 @@ int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
     free(upper_m0);
     free(lower_m0);
     free(inter_pot);
-    free(psi_th);
-    free(cn_psi_th);
-    free(cn_solution);
-    free(aux_workspace);
     cmatFree(nphi - 1, mid);
     cmatFree(nphi - 1, l_decomp);
     cmatFree(nphi - 1, u_decomp);
@@ -534,11 +542,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         upper,
         lower,
         upper_m0,
-        lower_m0,
-        psi_th,
-        cn_psi_th,
-        cn_solution,
-        aux_workspace;
+        lower_m0;
     Rarray
         azi,
         theta,
@@ -572,10 +576,6 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     inter_evol_op = carrDef(grid_points);   // exp[-i * dt/2 * inter_pot]
     phi_fft = carrDef(grid_points);         // FFT with respect to phi
     azi = rarrDef(nphi - 1);                // FFT frequencies/azimuthal number
-    psi_th = carrDef(ntheta);               // fixed phi value
-    cn_psi_th = carrDef(ntheta);            // Crank-Nicolson explict part
-    cn_solution = carrDef(ntheta);          // solution of tridiagonal system
-    aux_workspace = carrDef(ntheta);
 
     // Arrays in tridiagonal system from Crank-Nicolson method for theta
     // As for m = 0 we have different boundary conditions, the upper and
@@ -674,7 +674,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         carrAbs2(grid_points, Sa, abs_square_a);
         carrAbs2(grid_points, Sb, abs_square_b);
 
-        // EVOLUTION OF SPECIES A
+        // A) interaction part half time step
 
         for (j = 0; j < grid_points; j++)
         {
@@ -685,75 +685,16 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
         carrMultiply(grid_points, inter_evol_op, Sa, phi_fft);
 
-        // go to momentum space in phi axis. For a fixed theta there is
-        // a stride corresponding to phi varying from 0 to 2*PI  though
-        // the point 2*PI is ignore due to periodic boundary condition.
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeForward(desc, &phi_fft[j*nphi]);
-        }
+        // A) linear part entire time step
 
-        // Solve for azimuthal number == 0
-        _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
-        _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
-        tridiag_lu(
-                ntheta, upper_m0, l_decomp[0], u_decomp[0],
-                aux_workspace, cn_psi_th, cn_solution
+        _propagate_linear(
+                EQ, upper_m0, upper, l_decomp, u_decomp, azi, desc, phi_fft
         );
-        _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
-        // Solve for azimuthal number != 0
-
-        free(psi_th);
-        free(cn_psi_th);
-        free(cn_solution);
-        free(aux_workspace);
-#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
-        {
-            psi_th = carrDef(ntheta);
-            cn_psi_th = carrDef(ntheta);
-            cn_solution = carrDef(ntheta);
-            aux_workspace = carrDef(ntheta);
-
-            #pragma omp for schedule(static)
-            for (j = 1; j < nphi - 1; j++)
-            {
-                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-                tridiag_lu(
-                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-                cn_solution[0] = 0.0 + 0.0 * I;
-                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
-            }
-
-            free(psi_th);
-            free(cn_psi_th);
-            free(cn_solution);
-            free(aux_workspace);
-        }
-        psi_th = carrDef(ntheta);
-        cn_psi_th = carrDef(ntheta);
-        cn_solution = carrDef(ntheta);
-        aux_workspace = carrDef(ntheta);
-
-        // return to spatial coordinates in phi axis
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
-        }
-
-        // set periodic boundary at 2 * Pi
+        // A) transfer data
         carrCopy(grid_points, phi_fft, Sa);
-        for (j = 0; j < ntheta; j++)
-        {
-            Sa[j * nphi + nphi - 1] = Sa[j * nphi];
-        }
 
-        // EVOLUTION OF SPECIES B
+        // B) interaction part half time step
 
         for (j = 0; j < grid_points; j++)
         {
@@ -764,78 +705,23 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
         carrMultiply(grid_points, inter_evol_op, Sb, phi_fft);
 
-        // go to momentum space in phi axis. For a fixed theta there is
-        // a stride corresponding to phi varying from 0 to 2*PI
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeForward(desc, &phi_fft[j*nphi]);
-        }
+        // B) linear part entire time step
 
-        // Solve for azimuthal number == 0
-        _get_psi_theta(ntheta, nphi, 0, phi_fft, psi_th);
-        _explicit_theta(EQ, azi[0], psi_th, cn_psi_th);
-        tridiag_lu(
-                ntheta, upper_m0, l_decomp[0], u_decomp[0],
-                aux_workspace, cn_psi_th, cn_solution
+        _propagate_linear(
+                EQ, upper_m0, upper, l_decomp, u_decomp, azi, desc, phi_fft
         );
-        _set_psi_theta(ntheta, nphi, 0, cn_solution, phi_fft);
 
-        free(psi_th);
-        free(cn_psi_th);
-        free(cn_solution);
-        free(aux_workspace);
+        // B) transfer data
 
-        // Solve for azimuthal number != 0
-#pragma omp parallel private(j, psi_th, cn_psi_th, cn_solution, aux_workspace)
-        {
-            psi_th = carrDef(ntheta);
-            cn_psi_th = carrDef(ntheta);
-            cn_solution = carrDef(ntheta);
-            aux_workspace = carrDef(ntheta);
-
-            for (j = 1; j < nphi - 1; j++)
-            {
-                _get_psi_theta(ntheta, nphi, j, phi_fft, psi_th);
-                _explicit_theta(EQ, azi[j], psi_th, cn_psi_th);
-                tridiag_lu(
-                        ntheta - 2, upper, l_decomp[j], u_decomp[j],
-                        aux_workspace, &cn_psi_th[1], &cn_solution[1]);
-                cn_solution[0] = 0.0 + 0.0 * I;
-                cn_solution[ntheta-1] = 0.0 + 0.0 * I;
-                _set_psi_theta(ntheta, nphi, j, cn_solution, phi_fft);
-            }
-
-            free(psi_th);
-            free(cn_psi_th);
-            free(cn_solution);
-            free(aux_workspace);
-        }
-        psi_th = carrDef(ntheta);
-        cn_psi_th = carrDef(ntheta);
-        cn_solution = carrDef(ntheta);
-        aux_workspace = carrDef(ntheta);
-
-        // return to spatial coordinates in phi axis
-        #pragma omp parallel for private(j,m)
-        for (j = 0; j < ntheta; j++)
-        {
-            m = DftiComputeBackward(desc, &phi_fft[j*nphi]);
-        }
-
-        // set periodic boundary at 2 * Pi
         carrCopy(grid_points, phi_fft, Sb);
-        for (j = 0; j < ntheta; j++)
-        {
-            Sb[j * nphi + nphi - 1] = Sb[j * nphi];
-        }
 
         // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
 
         carrAbs2(grid_points, Sa, abs_square_a);
         carrAbs2(grid_points, Sb, abs_square_b);
 
-        // species A
+        // species A - phi_fft as workspace array
+
         carrCopy(grid_points, Sa, phi_fft);
         for (j = 0; j < grid_points; j++)
         {
@@ -846,7 +732,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         rcarrExp(grid_points, 0.5 * Idt, inter_pot, inter_evol_op);
         carrMultiply(grid_points, inter_evol_op, phi_fft, Sa);
 
-        // species B
+        // species B - phi_fft as workspace array
+
         carrCopy(grid_points, Sb, phi_fft);
         for (j = 0; j < grid_points; j++)
         {
@@ -887,10 +774,6 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     free(upper_m0);
     free(lower_m0);
     free(inter_pot);
-    free(psi_th);
-    free(cn_psi_th);
-    free(cn_solution);
-    free(aux_workspace);
     cmatFree(nphi - 1, mid);
     cmatFree(nphi - 1, l_decomp);
     cmatFree(nphi - 1, u_decomp);
