@@ -37,15 +37,35 @@ void ReachNewLine(FILE * f)
 }
 
 
-void save_equation_setup(FILE * f, EqDataPkg EQ, int num_species)
+void save_equation_setup(char prefix [], EqDataPkg EQ, int num_species)
 {
+    char
+        fname[100];
+    FILE
+        * txt_file_ptr;
+
+    strcpy(fname, "output/");
+    strcat(fname, prefix);
+    if (num_species == 1) strcat(fname, "_1species_equation_imagtime.dat");
+    else                  strcat(fname, "_2species_equation_imagtime.dat");
+    txt_file_ptr = fopen(fname, "w");
+    if (txt_file_ptr == NULL)
+    {
+        printf("\n\nERROR: impossible to open file %s\n\n", fname);
+        exit(EXIT_FAILURE);
+    }
+
     // Grid domain
-    fprintf(f, "%d %d %lf %d ", EQ->nphi, EQ->ntheta, EQ->dt, EQ->nt);
+    fprintf(txt_file_ptr,
+            "%d %d %lf %d ",
+            EQ->nphi, EQ->ntheta, EQ->dt, EQ->nt
+    );
+
     // Equation parameters
     if (num_species == 2)
     {
         fprintf(
-                f,
+                txt_file_ptr,
                 "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf\n",
                 EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
                 EQ->ga, EQ->gb, EQ->gab
@@ -53,8 +73,121 @@ void save_equation_setup(FILE * f, EqDataPkg EQ, int num_species)
     }
     else
     {
-        fprintf(f, "%.15lf %.15lf %.15lf\n", EQ->nabla_coef, EQ->omega, EQ->ga);
+        fprintf(txt_file_ptr,
+                "%.15lf %.15lf %.15lf\n",
+                EQ->nabla_coef, EQ->omega, EQ->ga
+        );
     }
+    fclose(txt_file_ptr);
+}
+
+
+void save_obs_2species(char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb)
+{
+    int
+        nphi,
+        ntheta;
+    double
+        dphi,
+        lza,
+        lzb,
+        mu_a,
+        mu_b,
+        energy,
+        kin_energy,
+        den_overlap;
+    Rarray
+        theta,
+        abs_square_a,
+        abs_square_b;
+    char
+        fname[100];
+    FILE
+        * txt_file_ptr;
+
+    nphi = EQ->nphi;
+    ntheta = EQ->ntheta;
+    dphi = EQ->dphi;
+    theta = EQ->theta;
+
+    abs_square_a = rarrDef(nphi * ntheta);
+    abs_square_b = rarrDef(nphi * ntheta);
+    carrAbs2(nphi * ntheta, Sa, abs_square_a);
+    carrAbs2(nphi * ntheta, Sb, abs_square_b);
+
+    energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
+    den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
+    lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
+    lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+
+    strcpy(fname, "output/");
+    strcat(fname, prefix);
+    strcat(fname, "_2species_obs_imagtime.dat");
+    txt_file_ptr = fopen(fname, "w");
+    if (txt_file_ptr == NULL)
+    {
+        printf("\n\nERROR: impossible to open file %s\n\n", fname);
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(txt_file_ptr,
+            "%.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf\n",
+            energy, kin_energy, mu_a, mu_b, den_overlap, lza, lzb
+    );
+
+    free(abs_square_b);
+    free(abs_square_a);
+    fclose(txt_file_ptr);
+}
+
+
+void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S)
+{
+    int
+        nphi,
+        ntheta;
+    double
+        dphi,
+        lz,
+        mu,
+        energy,
+        kin_energy;
+    Rarray
+        theta,
+        abs_square;
+    char
+        fname[100];
+    FILE
+        * txt_file_ptr;
+
+    nphi = EQ->nphi;
+    ntheta = EQ->ntheta;
+    dphi = EQ->dphi;
+    theta = EQ->theta;
+
+    abs_square = rarrDef(nphi * ntheta);
+    carrAbs2(nphi * ntheta, S, abs_square);
+
+    energy = functionals_single(EQ, S, &kin_energy, &mu);
+    lz = angular_momentum_lz(nphi, ntheta, dphi, theta, S);
+
+    strcpy(fname, "output/");
+    strcat(fname, prefix);
+    strcat(fname, "_1species_obs_imagtime.dat");
+    txt_file_ptr = fopen(fname, "w");
+    if (txt_file_ptr == NULL)
+    {
+        printf("\n\nERROR: impossible to open file %s\n\n", fname);
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(txt_file_ptr,
+            "%.10lf %.10lf %.10lf %.10lf\n",
+            energy, kin_energy, mu, lz
+    );
+
+    free(abs_square);
+    fclose(txt_file_ptr);
 }
 
 
@@ -325,24 +458,12 @@ int main(int argc, char * argv[])
     // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
     EQ = setup_equation(infname, num_species);
 
+    save_equation_setup(outfname, EQ, num_species);
+
     // configure initial condition
     Sa = carrDef(EQ->nphi * EQ->ntheta);
     Sb = carrDef(EQ->nphi * EQ->ntheta);
     setup_initial_condition(EQ, infname, Sa, Sb);
-
-    // save equation parameters in output file
-    strcpy(fname, "output/");
-    strcat(fname, outfname);
-    if (num_species == 1) strcat(fname, "_1species_equation_imagtime.dat");
-    else                  strcat(fname, "_2species_equation_imagtime.dat");
-    txt_file_ptr = fopen(fname, "w");
-    if (txt_file_ptr == NULL)
-    {
-        printf("\n\nERROR: impossible to open file %s\n\n", fname);
-        exit(EXIT_FAILURE);
-    }
-    save_equation_setup(txt_file_ptr, EQ, num_species);
-    fclose(txt_file_ptr);
 
     printf("\n\n\n\n");
     printf("\t\t*********************************************\n");
@@ -373,29 +494,31 @@ int main(int argc, char * argv[])
 
     start = omp_get_wtime();
 
-    if (num_species == 2)
+    switch (num_species)
     {
-        N = splitstep_spherical_shell(EQ, Sa, Sb);
+        case 1:
+            N = splitstep_spherical_shell_single(EQ, Sa);
+            // Record data
+            strcpy(fname, "output/");
+            strcat(fname, outfname);
+            strcat(fname, "_state_imagtime.dat");
+            carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+            save_obs_1species(outfname, EQ, Sa);
+            break;
 
-        // Record data
-        strcpy(fname, "output/");
-        strcat(fname, outfname);
-        strcat(fname, "_speciesA_imagtime.dat");
-        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
-        strcpy(fname, "output/");
-        strcat(fname, outfname);
-        strcat(fname, "_speciesB_imagtime.dat");
-        carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
-    }
-    else
-    {
-        N = splitstep_spherical_shell_single(EQ, Sa);
-
-        // Record data
-        strcpy(fname, "output/");
-        strcat(fname, outfname);
-        strcat(fname, "_state_imagtime.dat");
-        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+        case 2:
+            N = splitstep_spherical_shell(EQ, Sa, Sb);
+            // Record data
+            strcpy(fname, "output/");
+            strcat(fname, outfname);
+            strcat(fname, "_speciesA_imagtime.dat");
+            carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+            strcpy(fname, "output/");
+            strcat(fname, outfname);
+            strcat(fname, "_speciesB_imagtime.dat");
+            carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
+            save_obs_2species(outfname, EQ, Sa, Sb);
+            break;
     }
 
     time_used = (double) (omp_get_wtime() - start);
