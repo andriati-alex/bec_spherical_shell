@@ -5,3 +5,5 @@ output/*
 bin/*
 log/*
 figures/*
+__pycache__
+backup_files/*
