@@ -7,6 +7,9 @@ from numba import njit, prange, int32, float64, complex128
 
 
 def sphere_integration(dphi, theta, func):
+    """
+    Integrate `func` in spherical coordinates
+    """
     func_theta = np.array(
         [phi_integ for phi_integ in simps(func, dx=dphi, axis=1)]
     )
@@ -17,6 +20,15 @@ def sphere_integration(dphi, theta, func):
     (int32, int32, int32, complex128[:], complex128[:, :, :], complex128[:, :])
 )
 def set_state(ntht, nphi, n_sph_harm, coef, sph_harm_arr, state):
+    """
+    Auxiliar function to compute state from coefficients
+    in spherical harmonics basis expansion
+
+    output
+    ------
+    `state` : ``2D numpy.array``
+
+    """
     cusum = complex(0, 0)
     for i in prange(ntht):
         for j in prange(nphi):
@@ -27,7 +39,33 @@ def set_state(ntht, nphi, n_sph_harm, coef, sph_harm_arr, state):
 
 
 class StateSphericalBasis:
-    def __init__(self, lmax, lmin=0, m_min=0, n_phi_pts=101, n_tht_pts=101):
+    """
+    Class to provide interface in using constraint minimization in spherical
+    harmonic basis with scipy.optimize.minimize with 'SLSQP' method. In class
+    initialization, minimum and maximum values for 'l' angular momentum must
+    be provided, as well as the grid points in the sphere
+
+    Parameters
+    ----------
+    `lmax` : ``int``
+        maximum value for l angular momentum in basis expansion
+    `lmin` : ``int``
+        minimum value for l angular momentum in basis expansion <= `lmax`
+    `m_min` : ``int``
+        minimum ABSOLUTE value for azimuthal number <= `lmin`
+    `n_phi_pts` : ``int`` (default 101)
+        number of grid points to discretize theta angle
+    `n_tht_pts` : ``int`` (default 101)
+        number of grid points to discretize phi angle
+
+    Usual parameters in methods
+    `frac_a`, `frac_b`, `ga`, `gb`, `gab`
+
+    """
+
+    def __init__(
+        self, lmax, lmin=0, m_min=0, n_phi_pts=101, n_tht_pts=101, seed=1000
+    ):
         self.lmax = lmax
         self.lmin = lmin
         self.m_min = m_min
@@ -51,6 +89,7 @@ class StateSphericalBasis:
                     m, l, self.phi_grid, self.tht_grid
                 )
                 i = i + 1
+        self.seed = seed
 
     def __kinect_energy(self, coef_a, coef_b, frac_a, frac_b):
         k = 0
@@ -139,19 +178,43 @@ class StateSphericalBasis:
         return psi
 
     def minimize_energy(self, frac_a, frac_b, ga, gb, gab, err_tol=1e-4):
+        """
+        Minimize Gross-Pitaevskii energy functional in the domain defined
+        in class initialization using spherical harmonics basis expansion
+
+        Parameters
+        ----------
+        `frac_a` : ``float64``
+            fraction of number of atoms of species A
+        `frac_b` : ``float64``
+            fraction of number of atoms of species B
+        `ga` : ``float64``
+            interaction parameter of species A
+        `gb` : ``float64``
+            interaction parameter of species B
+        `gab` : ``float64``
+            interspecies interaction parameter
+        `err_tol` : ``float64`` default 1E-4
+            error allowed in optimization method (optional)
+
+        Return
+        ------
+        ``tuple`` : 3-elements
+            (energy, state of species A, state of species B)
+
+        """
         c0 = np.zeros(2 * self.n_sph_harm, dtype=np.complex128)
-        w_real = np.random.random(2 * self.n_sph_harm) - 0.5
-        w_imag = np.random.random(2 * self.n_sph_harm) - 0.5
+        rand_generator = np.random.default_rng(seed=self.seed)
+        w_real = rand_generator.random(2 * self.n_sph_harm) - 0.5
+        w_imag = rand_generator.random(2 * self.n_sph_harm) - 0.5
         i = 0
         for l in range(self.lmin, self.lmax + 1):
             default_m = np.arange(-l, l + 1)
             consider_m = default_m[abs(default_m) >= self.m_min]
             for m in consider_m:
                 c0[i] = (w_real[i] + 1.0j * w_imag[i]) / sqrt(factorial(l + 1))
-                c0[i + self.n_sph_harm] = (
-                    w_real[i + self.n_sph_harm]
-                    + 1.0j * w_imag[i + self.n_sph_harm]
-                ) / sqrt(factorial(l + 1))
+                j = i + self.n_sph_harm
+                c0[j] = (w_real[j] + 1.0j * w_imag[j]) / sqrt(factorial(l + 1))
                 i = i + 1
         c0_spec_a = c0[: self.n_sph_harm]
         c0_spec_b = c0[self.n_sph_harm :]
@@ -175,3 +238,15 @@ class StateSphericalBasis:
         )
         ca, cb = self.__separate_coef(res.x)
         return res.fun, self.__state(ca), self.__state(cb)
+
+    def sweep_interspecies(self, frac_a, frac_b, ga, gb, gab_list):
+        """
+        Compute states using minimization routine for a list of
+        interspecies interaction strength `gab_list` with other
+        parameters fixed
+        """
+        results = []
+        for gab in gab_list:
+            res = self.minimize_energy(frac_a, frac_b, ga, gb, gab)
+            results.append(res)
+        return results

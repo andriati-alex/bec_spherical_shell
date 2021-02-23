@@ -1,13 +1,16 @@
 import os
 import argparse
+from random import randint
 import numpy as np
-from numpy import pi
-from math import sqrt, factorial
+from math import pi, sqrt, factorial
 from scipy.integrate import simps
 from scipy.special import sph_harm
 
 
-def general_spherical_state(lmax, phi_pts, tht_pts):
+def general_spherical_state(lmax, phi_pts, tht_pts, seed):
+    if not isinstance(seed, int):
+        raise ValueError("Seed provided {} is not integer".format(seed))
+    rand_generator = np.random.default_rng(seed=seed)
     dphi = 2 * pi / (phi_pts - 1)
     dtht = pi / (tht_pts - 1)
     phi, tht = np.meshgrid(
@@ -15,16 +18,16 @@ def general_spherical_state(lmax, phi_pts, tht_pts):
     )
     grid_noise = np.zeros([tht_pts, phi_pts], dtype=np.complex128)
     grid_noise[1 : tht_pts - 1, 1 : phi_pts - 1] = 0.25 * (
-        np.random.random([tht_pts - 2, phi_pts - 2])
-        + 1.0j * (np.random.random([tht_pts - 2, phi_pts - 2]))
+        rand_generator.random([tht_pts - 2, phi_pts - 2])
+        + 1.0j * rand_generator.random([tht_pts - 2, phi_pts - 2])
         - 0.5
         - 0.5j
     )
     psi = sph_harm(0, 0, phi, tht) + grid_noise
-    max_number_sph_harm = int((2 * lmax + 1 + 1) * (lmax + 1) / 2)
+    number_sph_harm = int((2 * lmax + 1 + 1) * (lmax + 1) / 2)
     w = 5 * (
-        np.random.random(max_number_sph_harm)
-        + 1.0j * np.random.random(max_number_sph_harm)
+        rand_generator.random(number_sph_harm)
+        + 1.0j * rand_generator.random(number_sph_harm)
         - 0.5
         - 0.5j
     )
@@ -45,8 +48,7 @@ if __name__ == "__main__":
         os.path.expanduser("~"), "programs/bec_spherical_shell/input"
     )
     p = argparse.ArgumentParser(
-        usage="python %(prog)s `domain_grid` : n_phi n_theta dt n_dt"
-        " [optional_args] ",
+        usage="python %(prog)s n_phi n_theta dt n_dt [optional_args] ",
         description="Initial condition generator of random"
         " quantum states in a spherical shell",
     )
@@ -78,13 +80,12 @@ if __name__ == "__main__":
         help="number of time steps to propagate initial condition",
     )
     p.add_argument(
-        "-p",
-        "--path",
+        "-path",
         dest="input_dir",
         action="store",
         default=default_input_dir,
         type=str,
-        help="path to save files with initial condition specifications",
+        help="path to save files generated",
     )
     p.add_argument(
         "-lmax",
@@ -92,6 +93,62 @@ if __name__ == "__main__":
         default=15,
         type=int,
         help="maximum spherical harmonic number l",
+    )
+    p.add_argument(
+        "--seed-a",
+        action="store",
+        dest="seed_a",
+        default=randint(1, 1000000),
+        type=int,
+        help="Integer seed to generate random numbers",
+    )
+    p.add_argument(
+        "--seed-b",
+        action="store",
+        dest="seed_b",
+        default=randint(1, 1000000),
+        type=int,
+        help="Integer seed to generate random numbers",
+    )
+    p.add_argument(
+        "--frac-a",
+        action="store",
+        dest="frac_a",
+        default=0.5,
+        type=float,
+        help="fraction of atoms of species A",
+    )
+    p.add_argument(
+        "--frac-b",
+        action="store",
+        dest="frac_b",
+        default=0.5,
+        type=float,
+        help="fraction of atoms of spceies B",
+    )
+    p.add_argument(
+        "-ga",
+        action="store",
+        dest="ga",
+        default=10,
+        type=float,
+        help="interaction strength species A",
+    )
+    p.add_argument(
+        "-gb",
+        action="store",
+        dest="gb",
+        default=10,
+        type=float,
+        help="interaction strength species B",
+    )
+    p.add_argument(
+        "-gab",
+        action="store",
+        dest="gab",
+        default=5,
+        type=float,
+        help="interspecies interaction strength",
     )
     args = p.parse_args()
 
@@ -109,31 +166,40 @@ if __name__ == "__main__":
                 print("process aborted")
                 exit()
 
-    psi_a = general_spherical_state(args.lmax, args.phi_pts, args.tht_pts)
-    psi_b = general_spherical_state(args.lmax, args.phi_pts, args.tht_pts)
+    print(args.seed_a, args.seed_b)
+    psi_a = general_spherical_state(
+        args.lmax, args.phi_pts, args.tht_pts, args.seed_a
+    )
+    psi_b = general_spherical_state(
+        args.lmax, args.phi_pts, args.tht_pts, args.seed_b
+    )
 
     # Record initial state A
     np.savetxt(
-        os.path.join(args.input_dir, "state_speciesA_init.dat"),
+        os.path.join(args.input_dir, "rnd_state_speciesA_init.dat"),
         psi_a.reshape(args.phi_pts * args.tht_pts).T,
         fmt="%.15E",
     )
 
     # Record initial state B
     np.savetxt(
-        os.path.join(args.input_dir, "state_speciesB_init.dat"),
+        os.path.join(args.input_dir, "rnd_state_speciesB_init.dat"),
         psi_b.reshape(args.phi_pts * args.tht_pts).T,
         fmt="%.15E",
     )
 
     # Configure domain
-    f = open(os.path.join(args.input_dir, "state_domain.dat"), "w")
+    f = open(os.path.join(args.input_dir, "rnd_state_domain.dat"), "w")
     f.write(
-        "{} {} {} {}".format(args.phi_pts, args.tht_pts, args.dt, args.ndt)
+        "{} {} {} {}\n".format(args.phi_pts, args.tht_pts, args.dt, args.ndt)
     )
     f.close()
 
     # Default values are set for equation parameters
-    f = open(os.path.join(args.input_dir, "state_eq.dat"), "w")
-    f.write("-0.5 0.0 0.5 0.5 10.0 10.0 5.0")
+    f = open(os.path.join(args.input_dir, "rnd_state_eq.dat"), "w")
+    f.write(
+        "-0.5 0.0 {:.2f} {:.2f} {:.5f} {:.5f} {:.5f}\n".format(
+            args.frac_a, args.frac_b, args.ga, args.gb, args.gab
+        )
+    )
     f.close()
