@@ -6,7 +6,7 @@
 
 void TimePrint(double t)
 {
-    
+
     // format and print time in days / hours / minutes
 
     int
@@ -37,7 +37,8 @@ void ReachNewLine(FILE * f)
 }
 
 
-void save_equation_setup(char prefix [], EqDataPkg EQ, int num_species)
+void save_equation_setup(
+        char prefix [], EqDataPkg EQ, int num_species, int line)
 {
     char
         fname[100];
@@ -48,7 +49,10 @@ void save_equation_setup(char prefix [], EqDataPkg EQ, int num_species)
     strcat(fname, prefix);
     if (num_species == 1) strcat(fname, "_1species_equation_imagtime.dat");
     else                  strcat(fname, "_2species_equation_imagtime.dat");
-    txt_file_ptr = fopen(fname, "w");
+
+    if (line > 1) txt_file_ptr = fopen(fname, "a");
+    else          txt_file_ptr = fopen(fname, "w");
+
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
@@ -82,7 +86,8 @@ void save_equation_setup(char prefix [], EqDataPkg EQ, int num_species)
 }
 
 
-void save_obs_2species(char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb)
+void save_obs_2species(
+        char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb, int line)
 {
     int
         nphi,
@@ -123,7 +128,10 @@ void save_obs_2species(char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb)
     strcpy(fname, "output/");
     strcat(fname, prefix);
     strcat(fname, "_2species_obs_imagtime.dat");
-    txt_file_ptr = fopen(fname, "w");
+
+    if (line > 1) txt_file_ptr = fopen(fname, "a");
+    else          txt_file_ptr = fopen(fname, "w");
+
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
@@ -141,7 +149,7 @@ void save_obs_2species(char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb)
 }
 
 
-void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S)
+void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S, int line)
 {
     int
         nphi,
@@ -174,7 +182,10 @@ void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S)
     strcpy(fname, "output/");
     strcat(fname, prefix);
     strcat(fname, "_1species_obs_imagtime.dat");
-    txt_file_ptr = fopen(fname, "w");
+
+    if (line > 1) txt_file_ptr = fopen(fname, "a");
+    else          txt_file_ptr = fopen(fname, "w");
+
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
@@ -191,7 +202,7 @@ void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S)
 }
 
 
-EqDataPkg setup_equation(char prefix [], int num_species)
+EqDataPkg setup_equation(char prefix [], int num_species, int line)
 {
 
 /** Read line by line of _domain file and _eq to setup the equation **/
@@ -230,11 +241,17 @@ EqDataPkg setup_equation(char prefix [], int num_species)
     {
         printf(" ................ Found !");
     }
+
+    // advance to the requested line
+    for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
+
     scanf_returned = fscanf(
             txt_file_ptr, "%lf %lf %lf %lf %lf %lf %lf",
             &nabla_coef, &rotation_freq, &frac_a, &frac_b, &ga, &gb, &gab
     );
+
     fclose(txt_file_ptr);
+
     if (scanf_returned != 7)
     {
         printf("\n\nWrong number of parameters or bad format in %s", fname);
@@ -256,12 +273,18 @@ EqDataPkg setup_equation(char prefix [], int num_species)
     {
         printf(" ............ Found !");
     }
+
+    // advance to the requested line
+    for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
+
     scanf_returned = fscanf(
             txt_file_ptr,
             "%d %d %lf %d",
             &phi_grid_size, &theta_grid_size, &step_size, &time_steps
     );
+
     fclose(txt_file_ptr);
+
     if (scanf_returned != 4)
     {
         printf("\n\nWrong number of parameters or bad format in %s", fname);
@@ -385,12 +408,14 @@ int main(int argc, char * argv[])
     int
         N,
         i,
+        njobs,
         num_species;
     double
         start,      // start trigger to measure time
         time_used;  // Time used in calling evolution routine
     char
         c,
+        line_str[20],
         fname[100],     // name of files to open
         infname[100],   // input file name prefix
         outfname[100];  // output file name prefix
@@ -448,87 +473,113 @@ int main(int argc, char * argv[])
 
     printf("\n\nImaginary time propagation for %d species", num_species);
 
-    printf("\n\n");
-    printf("\t\t**********************************************\n");
-    printf("\t\t*                                            *\n");
-    printf("\t\t*           CONFIGURING FROM FILES           *\n");
-    printf("\t\t*                                            *\n");
-    printf("\t\t**********************************************\n");
+    strcpy(fname, "input/");
+    strcat(fname, infname);
+    strcat(fname, "_eq.dat");
+    njobs = NumberOfLines(fname);
 
-    // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
-    EQ = setup_equation(infname, num_species);
+    printf("\nNumber of jobs requested : %d\n", njobs);
 
-    save_equation_setup(outfname, EQ, num_species);
-
-    // configure initial condition
-    Sa = carrDef(EQ->nphi * EQ->ntheta);
-    Sb = carrDef(EQ->nphi * EQ->ntheta);
-    setup_initial_condition(EQ, infname, Sa, Sb);
-
-    printf("\n\n\n\n");
-    printf("\t\t*********************************************\n");
-    printf("\t\t*                                           *\n");
-    printf("\t\t*            GRID SPECIFICATIONS            *\n");
-    printf("\t\t*                                           *\n");
-    printf("\t\t*********************************************\n");
-
-    printf("\nphi = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
-            EQ->phi[0], EQ->phi[1],
-            EQ->phi[EQ->nphi - 2], EQ->phi[EQ->nphi - 1]
-    );
-    printf("%d grid points with spacing = %.3lf\n",EQ->nphi, EQ->dphi);
-
-    printf("\ntheta = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
-            EQ->theta[0], EQ->theta[1],
-            EQ->theta[EQ->ntheta-2], EQ->theta[EQ->ntheta-1]
-    );
-    printf("%d grid points with spacing = %.3lf\n", EQ->ntheta, EQ->dtheta);
-    printf("\nFinal time %.2lf in steps of %.6lf\n", EQ->nt*EQ->dt, EQ->dt);
-
-    printf("\n\n\n\n");
-    printf("\t\t*********************************************\n");
-    printf("\t\t*                                           *\n");
-    printf("\t\t*         START INTEGRATION ROUTINE         *\n");
-    printf("\t\t*                                           *\n");
-    printf("\t\t*********************************************\n");
-
-    start = omp_get_wtime();
-
-    switch (num_species)
+    for (i = 1; i <= njobs; i++)
     {
-        case 1:
-            N = splitstep_spherical_shell_single(EQ, Sa);
-            // Record data
-            strcpy(fname, "output/");
-            strcat(fname, outfname);
-            strcat(fname, "_state_imagtime.dat");
-            carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
-            save_obs_1species(outfname, EQ, Sa);
-            break;
+        // line number to read
+        sprintf(line_str, "%d", i);
 
-        case 2:
-            N = splitstep_spherical_shell(EQ, Sa, Sb);
-            // Record data
-            strcpy(fname, "output/");
-            strcat(fname, outfname);
-            strcat(fname, "_speciesA_imagtime.dat");
-            carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
-            strcpy(fname, "output/");
-            strcat(fname, outfname);
-            strcat(fname, "_speciesB_imagtime.dat");
-            carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
-            save_obs_2species(outfname, EQ, Sa, Sb);
-            break;
+        printf("\n\n");
+        sepline();
+        printf("\nInitiating job %d ...", i);
+
+        printf("\n\n");
+        printf("\t\t**********************************************\n");
+        printf("\t\t*                                            *\n");
+        printf("\t\t*           CONFIGURING FROM FILES           *\n");
+        printf("\t\t*                                            *\n");
+        printf("\t\t**********************************************\n");
+
+        // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
+        EQ = setup_equation(infname, num_species, i);
+
+        save_equation_setup(outfname, EQ, num_species, i);
+
+        // configure initial condition
+        Sa = carrDef(EQ->nphi * EQ->ntheta);
+        Sb = carrDef(EQ->nphi * EQ->ntheta);
+        setup_initial_condition(EQ, infname, Sa, Sb);
+
+        printf("\n\n\n\n");
+        printf("\t\t*********************************************\n");
+        printf("\t\t*                                           *\n");
+        printf("\t\t*            GRID SPECIFICATIONS            *\n");
+        printf("\t\t*                                           *\n");
+        printf("\t\t*********************************************\n");
+
+        printf("\nphi = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
+                EQ->phi[0], EQ->phi[1],
+                EQ->phi[EQ->nphi - 2], EQ->phi[EQ->nphi - 1]
+        );
+        printf("%d grid points with spacing = %.3lf\n",EQ->nphi, EQ->dphi);
+
+        printf("\ntheta = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
+                EQ->theta[0], EQ->theta[1],
+                EQ->theta[EQ->ntheta-2], EQ->theta[EQ->ntheta-1]
+        );
+        printf("%d grid points with spacing = %.3lf\n",
+                EQ->ntheta, EQ->dtheta
+        );
+        printf("\n%d time steps of size %.6lf, final time = %.2lf\n",
+                EQ->nt, EQ->dt, EQ->nt*EQ->dt
+        );
+
+        printf("\n\n\n\n");
+        printf("\t\t*********************************************\n");
+        printf("\t\t*                                           *\n");
+        printf("\t\t*         START INTEGRATION ROUTINE         *\n");
+        printf("\t\t*                                           *\n");
+        printf("\t\t*********************************************\n");
+
+        start = omp_get_wtime();
+
+        switch (num_species)
+        {
+            case 1:
+                N = splitstep_spherical_shell_single(EQ, Sa);
+                // Record data
+                strcpy(fname, "output/");
+                strcat(fname, outfname);
+                strcat(fname, "_state_job");
+                strcat(fname, line_str);
+                strcat(fname, "_imagtime.dat");
+                carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+                save_obs_1species(outfname, EQ, Sa, i);
+                break;
+            case 2:
+                N = splitstep_spherical_shell(EQ, Sa, Sb);
+                // Record data
+                strcpy(fname, "output/");
+                strcat(fname, outfname);
+                strcat(fname, "_speciesA_job");
+                strcat(fname, line_str);
+                strcat(fname, "_imagtime.dat");
+                carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+                strcpy(fname, "output/");
+                strcat(fname, outfname);
+                strcat(fname, "_speciesB_job");
+                strcat(fname, line_str);
+                strcat(fname, "_imagtime.dat");
+                carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
+                save_obs_2species(outfname, EQ, Sa, Sb, i);
+                break;
+        }
+
+        time_used = (double) (omp_get_wtime() - start);
+        printf("\n\nTime elapsed in time evolution of %d steps", N);
+        printf(" : %.0lf sec = ",time_used);
+        TimePrint(time_used);
+
+        free(Sa);
+        free(Sb);
+        ReleaseEqDataPkg(EQ);
     }
-
-    time_used = (double) (omp_get_wtime() - start);
-    printf("\n\nTime elapsed in time evolution of %d steps", N);
-    printf(" : %.0lf sec = ",time_used);
-    TimePrint(time_used);
-
-    free(Sa);
-    free(Sb);
-    ReleaseEqDataPkg(EQ);
 
     printf("\n\n");
     return 0;

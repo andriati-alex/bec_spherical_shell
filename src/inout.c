@@ -2,6 +2,46 @@
 
 
 
+FILE * openFileRead(char fname [])
+{
+    FILE
+        * arq;
+
+    arq = fopen(fname,"r");
+    if (arq == NULL)
+    {
+        printf("\n\nERROR: impossible to open file %s\n\n",fname);
+        exit(EXIT_FAILURE);
+    }
+    return arq;
+}
+
+
+
+unsigned int NumberOfLines(char fname [])
+{
+
+    int
+        i;
+    char
+        c;
+    FILE
+        * txt_file_ptr;
+
+    i = 0;
+    txt_file_ptr = openFileRead(fname);
+    c = getc(txt_file_ptr);
+    while (c != EOF)
+    {
+        if (c == '\n') i++;
+        c = getc(txt_file_ptr);
+    }
+    fclose(txt_file_ptr);
+    return i;
+}
+
+
+
 void sepline()
 {
 

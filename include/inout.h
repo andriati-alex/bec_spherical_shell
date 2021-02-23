@@ -15,6 +15,8 @@ void sepline();
 
 void cprint(double complex z);
 
+unsigned int NumberOfLines(char []);
+
 
 
 void carr_print(int n, Carray v);
