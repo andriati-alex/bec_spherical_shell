@@ -33,6 +33,12 @@ EqDataPkg equation_structure(int, int, double, int, double, double,
         double, double, double, double, double);
 // Pack all equation parameters
 
+TwoSpeciesState alloc_two_species_struct(int, int);
+
+void pkg_states(Carray, Carray, TwoSpeciesState);
+
+void unpkg_states(Carray, Carray, TwoSpeciesState);
+
 
 
 void rmatFree(int m, Rmatrix M); // Release real matrix with m rows
@@ -44,5 +50,7 @@ void ccscmatFree(CCScmat M); // Relase CCS matrix of complex numbers
 void ccsrmatFree(CCSrmat M); // Relase CCS matrix of real numbers
 
 void ReleaseEqDataPkg(EqDataPkg);
+
+void release_two_species_state(TwoSpeciesState);
 
 #endif

@@ -321,24 +321,20 @@ void renormalizeReal(int nx, int ny, Rarray f, double hx, double hy,
 }
 
 
-void derivative_periodic(int Npts, Carray f, double dx, Carray dfdx)
+void derivative_1dperiodic(int n, Carray f, double dx, Carray dfdx)
 {
 
-/** Compute derivative of function `f` in `Npts` grid points with
-    spacing `dx` considering  periodic boundary conditions,  that
-    is f[n-1] = f[0],  with 4th-order Finite-Differences accuracy
-    Output parameter : `dfdx`                                 **/
+/** Compute derivative of function `f` in `n` grid  points  with
+    spacing `dx` considering  periodic boundary conditions, that
+    is f[n-1] = f[0],  with 4th-order Finite-Differences  method
+    Output parameter : `dfdx`                                **/
 
     int
-        n,
         i;
     double
         r;
 
-    n = Npts;            // make the life easier
     r = 1.0 / (12 * dx); // ratio for a fourth-order scheme
-
-    // COMPUTE USING PERIODIC BOUNDARY CONDITIONS
 
     dfdx[0]   = ( f[n-3] - f[2] + 8 * (f[1] - f[n-2]) ) * r;
     dfdx[1]   = ( f[n-2] - f[3] + 8 * (f[2] - f[0]) )   * r;
@@ -348,6 +344,263 @@ void derivative_periodic(int Npts, Carray f, double dx, Carray dfdx)
     for (i = 2; i < n - 2; i++)
     {
         dfdx[i] = ( f[i-2] - f[i+2] + 8 * (f[i+1] - f[i-1]) ) * r;
+    }
+
+}
+
+
+void twice_derivative_1dperiodic(int n, Carray f, double dx, Carray d2fdx)
+{
+
+/** Compute second derivative of function `f` in `n` grid points
+    with spacing `dx`. Consider f[0] = f[n - 1] the boundary **/
+
+    int
+        i,
+        l;
+
+    double
+        r;
+
+    r = 1.0 / (12 * dx * dx);
+
+    l = n - 2; // last index before boundary (at n - 1 => 0)
+    d2fdx[0] = r * (- f[2] + 16 * f[1] - 30 * f[0] + 16 * f[l] - f[l - 1]);
+    d2fdx[1] = r * (- f[3] + 16 * f[2] - 30 * f[1] + 16 * f[0] - f[l]);
+    d2fdx[l] = r * (- f[1] + 16 * f[0] - 30 * f[l] + 16 * f[l - 1] - f[l - 2]);
+    d2fdx[n - 1] = d2fdx[0];
+
+    for (i = 2; i < n - 2; i++)
+    {
+        d2fdx[i] = r * (
+                - f[i + 2] + 16 * f[i + 1] - 30 * f[i]
+                + 16 * f[i - 1] - f[i - 2]
+        );
+    }
+
+}
+
+
+void sph_phi_derivative(
+        int nphi, int ntht, Carray f, double dphi, Carray der)
+{
+
+/** Compute derivative of function with respect to phi in spherical
+    coordinates. At the poles the phi-derivative must vanish    **/
+
+    for (int i = 1; i < ntht - 1; i++)
+    {
+        derivative_1dperiodic(
+                nphi, &f[i * nphi], dphi, &der[i * nphi]
+        );
+    }
+
+    // at the poles the function must be constant with respect to phi
+    carrFill(nphi, 0.0 + 0.0 * I, &der[0]);
+    carrFill(nphi, 0.0 + 0.0 * I, &der[(ntht - 1) * nphi]);
+
+}
+
+
+void sph_phi_twice_derivative(
+        int nphi, int ntht, Carray f, double dphi, Carray der)
+{
+
+/** Compute derivative of function with respect to phi in spherical
+    coordinates. At the poles the phi-derivative must vanish    **/
+
+    for (int i = 1; i < ntht - 1; i++)
+    {
+        twice_derivative_1dperiodic(
+                nphi, &f[i * nphi], dphi, &der[i * nphi]
+        );
+    }
+
+    // at the poles the function must be constant with respect to phi
+    carrFill(nphi, 0.0 + 0.0 * I, &der[0]);
+    carrFill(nphi, 0.0 + 0.0 * I, &der[(ntht - 1) * nphi]);
+
+}
+
+
+void sph_theta_derivative(
+        int nphi, int ntht, Carray f, double dtht, Carray der)
+{
+    int
+        j,
+        i_phi,
+        adv,
+        bck,
+        adv_twice,
+        bck_twice,
+        pi_rotation;
+    double
+        r;
+
+    r = 1.0 / (12 * dtht); // ratio for a fourth-order scheme
+
+    for (j = 2; j < ntht - 2; j++)
+    {
+
+        for (i_phi = 0; i_phi < nphi; i_phi++)
+        {
+            adv_twice = (j + 2) * nphi + i_phi;
+            adv = (j + 1) * nphi + i_phi;
+            bck = (j - 1) * nphi + i_phi;
+            bck_twice = (j - 2) * nphi + i_phi;
+            der[j * nphi + i_phi] = r * (
+                    f[bck_twice] - f[adv_twice] + 8 * (f[adv] - f[bck])
+            );
+        }
+    }
+
+    j = 0;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        adv_twice = (j + 2) * nphi + i_phi;
+        adv = (j + 1) * nphi + i_phi;
+        bck = adv + pi_rotation;
+        bck_twice = adv_twice + pi_rotation;
+        der[j * nphi + i_phi] = r * (
+                f[bck_twice] - f[adv_twice] + 8 * (f[adv] - f[bck])
+        );
+    }
+
+    j = 1;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        adv_twice = (j + 2) * nphi + i_phi;
+        adv = (j + 1) * nphi + i_phi;
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = j * nphi + i_phi + pi_rotation;
+        der[j * nphi + i_phi] = r * (
+                f[bck_twice] - f[adv_twice] + 8 * (f[adv] - f[bck])
+        );
+    }
+
+    j = ntht - 1;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = (j - 2) * nphi + i_phi;
+        adv_twice = bck_twice + pi_rotation;
+        adv = bck + pi_rotation;
+        der[j * nphi + i_phi] = r * (
+                f[bck_twice] - f[adv_twice] + 8 * (f[adv] - f[bck])
+        );
+    }
+
+    j = ntht - 2;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = (j - 2) * nphi + i_phi;
+        adv_twice = j * nphi + i_phi + pi_rotation;
+        adv = (j + 1) * nphi + i_phi;
+        der[j * nphi + i_phi] = r * (
+                f[bck_twice] - f[adv_twice] + 8 * (f[adv] - f[bck])
+        );
+    }
+
+}
+
+
+void sph_theta_twice_derivative(
+        int nphi, int ntht, Carray f, double dtht, Carray der)
+{
+    int
+        j,
+        i_phi,
+        pnt,
+        adv,
+        bck,
+        adv_twice,
+        bck_twice,
+        pi_rotation;
+    double
+        r;
+
+    r = 1.0 / (12 * dtht * dtht); // ratio for a fourth-order scheme
+
+    for (j = 2; j < ntht - 2; j++)
+    {
+
+        for (i_phi = 0; i_phi < nphi; i_phi++)
+        {
+            pnt = j * nphi + i_phi;
+            adv_twice = (j + 2) * nphi + i_phi;
+            adv = (j + 1) * nphi + i_phi;
+            bck = (j - 1) * nphi + i_phi;
+            bck_twice = (j - 2) * nphi + i_phi;
+            der[pnt] = r * (
+                    - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
+                    - 30 * f[pnt]
+            );
+        }
+    }
+
+    j = 0;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pnt = j * nphi + i_phi;
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        adv_twice = (j + 2) * nphi + i_phi;
+        adv = (j + 1) * nphi + i_phi;
+        bck = adv + pi_rotation;
+        bck_twice = adv_twice + pi_rotation;
+        der[pnt] = r * (
+                - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
+                - 30 * f[pnt]
+        );
+    }
+
+    j = 1;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pnt = j * nphi + i_phi;
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        adv_twice = (j + 2) * nphi + i_phi;
+        adv = (j + 1) * nphi + i_phi;
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = pnt + pi_rotation;
+        der[pnt] = r * (
+                - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
+                - 30 * f[pnt]
+        );
+    }
+
+    j = ntht - 1;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pnt = j * nphi + i_phi;
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = (j - 2) * nphi + i_phi;
+        adv_twice = bck_twice + pi_rotation;
+        adv = bck + pi_rotation;
+        der[pnt] = r * (
+                - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
+                - 30 * f[pnt]
+        );
+    }
+
+    j = ntht - 2;
+    for (i_phi = 0; i_phi < nphi; i_phi++)
+    {
+        pnt = j * nphi + i_phi;
+        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
+        bck = (j - 1) * nphi + i_phi;
+        bck_twice = (j - 2) * nphi + i_phi;
+        adv_twice = pnt + pi_rotation;
+        adv = (j + 1) * nphi + i_phi;
+        der[pnt] = r * (
+                - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
+                - 30 * f[pnt]
+        );
     }
 
 }

@@ -24,7 +24,17 @@ void renormalize_spheric(EqDataPkg EQ, Carray S);
 
 void renormalizeReal(int, int, Rarray, double, double, double);
 
-void derivative_periodic(int, Carray, double, Carray);
+void derivative_1dperiodic(int, Carray, double, Carray);
+
+void twice_derivative_1dperiodic(int, Carray, double, Carray);
+
+void sph_phi_derivative(int, int, Carray, double, Carray);
+
+void sph_phi_twice_derivative(int, int, Carray, double, Carray);
+
+void sph_theta_derivative(int, int, Carray, double, Carray);
+
+void sph_theta_twice_derivative(int, int, Carray, double, Carray);
 
 
 

@@ -11,4 +11,6 @@ double functionals(EqDataPkg, Carray, Carray, double *, double *, double *);
 
 double density_overlap(EqDataPkg, Rarray, Rarray);
 
+double avg_residue(EqDataPkg, Carray, Carray, double, double);
+
 #endif

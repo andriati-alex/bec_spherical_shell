@@ -204,6 +204,49 @@ EqDataPkg equation_structure(
 }
 
 
+TwoSpeciesState alloc_two_species_struct(int nphi, int ntheta)
+{
+    TwoSpeciesState S = (TwoSpeciesState) malloc(
+            sizeof(struct _TwoSpeciesState)
+    );
+
+    if (S == NULL)
+    {
+        printf("\n\n\nMEMORY ERROR : malloc fail for TwoSpeciesState\n\n");
+        exit(EXIT_FAILURE);
+    }
+
+    S->nphi = nphi;
+    S->ntht = ntheta;
+    S->speca = carrDef(nphi * ntheta);
+    S->specb = carrDef(nphi * ntheta);
+    S->speca_re = rarrDef(nphi * ntheta);
+    S->speca_im = rarrDef(nphi * ntheta);
+    S->specb_re = rarrDef(nphi * ntheta);
+    S->specb_im = rarrDef(nphi * ntheta);
+
+    return S;
+}
+
+
+void pkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
+{
+    carrCopy(S->nphi * S->ntht, Sa, S->speca);
+    carrCopy(S->nphi * S->ntht, Sb, S->specb);
+    carrRealPart(S->nphi * S->ntht, S->speca, S->speca_re);
+    carrImagPart(S->nphi * S->ntht, S->speca, S->speca_im);
+    carrRealPart(S->nphi * S->ntht, S->specb, S->specb_re);
+    carrImagPart(S->nphi * S->ntht, S->specb, S->specb_im);
+}
+
+
+void unpkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
+{
+    carrCopy(S->nphi * S->ntht, S->speca, Sa);
+    carrCopy(S->nphi * S->ntht, S->specb, Sb);
+}
+
+
 
 
 
@@ -276,4 +319,16 @@ void ReleaseEqDataPkg(EqDataPkg EQ)
     free(EQ->phi);
     free(EQ->theta);
     free(EQ);
+}
+
+
+void release_two_species_state(TwoSpeciesState S)
+{
+    free(S->speca);
+    free(S->specb);
+    free(S->speca_re);
+    free(S->speca_im);
+    free(S->specb_re);
+    free(S->specb_im);
+    free(S);
 }

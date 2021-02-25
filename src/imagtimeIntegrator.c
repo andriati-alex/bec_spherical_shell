@@ -529,7 +529,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         gb,
         gab,
         Idt,
-        den_overlap;
+        den_overlap,
+        residue;
     double complex
         dt;
     Cmatrix
@@ -758,9 +759,10 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             printf("%5.1lf%%",(100.0 * k) / EQ->nt);
             lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
             lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+            residue = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
             printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
                     energy, kin_energy, mu_a, mu_b, den_overlap);
-            printf("  %11.8lf  %11.8lf\n", lza, lzb);
+            printf("  %11.8lf  %11.8lf   %11.8lf\n", lza, lzb, residue);
         }
 
     }

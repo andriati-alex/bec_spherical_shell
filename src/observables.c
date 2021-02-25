@@ -17,7 +17,7 @@ double angular_momentum_lz(
 
     for (j = 1; j < ntheta - 1; j++)
     {
-        derivative_periodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
+        derivative_1dperiodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
     }
 
 
@@ -35,6 +35,149 @@ double angular_momentum_lz(
     free(integ);
 
     return lz;
+}
+
+
+double avg_residue(
+        EqDataPkg EQ, Carray state_a, Carray state_b,
+        double mu_a, double mu_b)
+{
+    int
+        j,
+        i,
+        nphi,
+        ntht,
+        grid_pt;
+    double
+        dphi,
+        dtht,
+        nabla_coef,
+        ga,
+        gb,
+        gab,
+        sin_tht,
+        cos_tht;
+    double complex
+        sum_grid_res;
+    Rarray
+        tht,
+        abs_square_a,
+        abs_square_b;
+    Carray
+        grid_res,
+        nabla2phi,
+        der2tht,
+        der_tht;
+
+    // unpack equation data
+    tht = EQ->theta;
+    nphi = EQ->nphi;
+    ntht = EQ->ntheta;
+    dphi = EQ->dphi;
+    dtht = tht[1] - tht[0];
+    nabla_coef = EQ->nabla_coef;
+    ga = EQ->ga;
+    gb = EQ->gb;
+    gab = EQ->gab;
+
+    nabla2phi = carrDef(nphi * ntht);
+    der2tht = carrDef(nphi * ntht);
+    der_tht = carrDef(nphi * ntht);
+    abs_square_a = rarrDef(nphi * ntht);
+    abs_square_b = rarrDef(nphi * ntht);
+    grid_res = carrDef(nphi * ntht);
+
+    sum_grid_res = 0;
+
+    carrAbs2(nphi * ntht, state_a, abs_square_a);
+    carrAbs2(nphi * ntht, state_b, abs_square_b);
+
+    // Compute grid residue for species A
+
+    sph_theta_twice_derivative(nphi, ntht, state_a, dtht, der2tht);
+    sph_theta_derivative(nphi, ntht, state_a, dtht, der_tht);
+    sph_phi_twice_derivative(nphi, ntht, state_a, dphi, nabla2phi);
+
+    for (j = 1; j < ntht - 1; j++)
+    {
+        sin_tht = sin(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            nabla2phi[grid_pt] = nabla2phi[grid_pt] / sin_tht / sin_tht;
+        }
+    }
+
+    for (j = 0; j < ntht; j++)
+    {
+        sin_tht = sin(tht[j]);
+        cos_tht = cos(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            grid_res[grid_pt] = (
+                    nabla_coef * (
+                    sin_tht * der2tht[grid_pt] +
+                    cos_tht * der_tht[grid_pt] +
+                    sin_tht * nabla2phi[grid_pt]
+                    )
+                    + sin_tht * state_a[grid_pt] * (
+                    ga * abs_square_a[grid_pt] + gab * abs_square_b[grid_pt]
+                    )
+                    - sin_tht * mu_a * state_a[grid_pt]
+            );
+        }
+    }
+
+    sum_grid_res = Csimps2D(nphi, ntht, grid_res, dphi, dtht);
+
+    // Compute grid residue for species B
+
+    sph_theta_twice_derivative(nphi, ntht, state_b, dtht, der2tht);
+    sph_theta_derivative(nphi, ntht, state_b, dtht, der_tht);
+    sph_phi_twice_derivative(nphi, ntht, state_b, dphi, nabla2phi);
+
+    for (j = 1; j < ntht - 1; j++)
+    {
+        sin_tht = sin(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            nabla2phi[grid_pt] = nabla2phi[grid_pt] / sin_tht / sin_tht;
+        }
+    }
+
+    for (j = 0; j < ntht; j++)
+    {
+        sin_tht = sin(tht[j]);
+        cos_tht = cos(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            grid_res[grid_pt] = (
+                    nabla_coef * (
+                    sin_tht * der2tht[grid_pt] +
+                    cos_tht * der_tht[grid_pt] +
+                    sin_tht * nabla2phi[grid_pt]
+                    )
+                    + sin_tht * state_b[grid_pt] * (
+                    gb * abs_square_b[grid_pt] + gab * abs_square_a[grid_pt]
+                    )
+                    - sin_tht * mu_b * state_b[grid_pt]
+            );
+        }
+    }
+
+    sum_grid_res = sum_grid_res + Csimps2D(nphi, ntht, grid_res, dphi, dtht);
+
+    free(nabla2phi);
+    free(der2tht);
+    free(der_tht);
+    free(abs_square_a);
+    free(abs_square_b);
+    free(grid_res);
+
+    return cabs(sum_grid_res);
 }
 
 
@@ -66,7 +209,7 @@ void abs_grad_sphere_square(
     for (j = 1; j < ntheta - 1; j++)
     {
         // Compute gradient in phi axis
-        derivative_periodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
+        derivative_1dperiodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
         carrScalarMultiply(
                 nphi, &ds_dphi[j*nphi], 1.0 / sin(theta[j]), &grad_phi[j*nphi]
         );

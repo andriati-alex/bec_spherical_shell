@@ -134,4 +134,21 @@ struct _EquationDataPkg
 
 typedef struct _EquationDataPkg * EqDataPkg;
 
+struct _TwoSpeciesState
+{
+    int
+        nphi,
+        ntht;
+    Carray
+        speca,
+        specb;
+    Rarray
+        speca_re,
+        speca_im,
+        specb_re,
+        specb_im;
+};
+
+typedef struct _TwoSpeciesState * TwoSpeciesState;
+
 #endif
