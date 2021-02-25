@@ -41,7 +41,7 @@ def set_state(ntht, nphi, n_sph_harm, coef, sph_harm_arr, state):
 class StateSphericalBasis:
     """
     Class to provide interface in using constraint minimization in spherical
-    harmonic basis with scipy.optimize.minimize with 'SLSQP' method. In class
+    harmonic basis with scipy.optimize.minimize and 'SLSQP' method. In class
     initialization, minimum and maximum values for 'l' angular momentum must
     be provided, as well as the grid points in the sphere
 
@@ -199,8 +199,8 @@ class StateSphericalBasis:
 
         Return
         ------
-        ``tuple`` : 3-elements
-            (energy, state of species A, state of species B)
+        ``tuple`` : (``float``, ``2D numpy.array``, ``2D numpy.array``)
+            (energy, state_a, state_b)
 
         """
         c0 = np.zeros(2 * self.n_sph_harm, dtype=np.complex128)

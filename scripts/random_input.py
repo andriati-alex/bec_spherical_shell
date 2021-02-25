@@ -166,7 +166,6 @@ if __name__ == "__main__":
                 print("process aborted")
                 exit()
 
-    print(args.seed_a, args.seed_b)
     psi_a = general_spherical_state(
         args.lmax, args.phi_pts, args.tht_pts, args.seed_a
     )

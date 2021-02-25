@@ -13,7 +13,7 @@ mpl.rcParams["figure.subplot.wspace"] = 0.0
 
 
 class DensityPlot:
-    def __init__(self, data_path, prefix, view_tool="matplotlib"):
+    def __init__(self, data_path, prefix, job_id=1):
         file_prefix = os.path.join(data_path, prefix)
         eq_filename = file_prefix + "_2species_equation_imagtime.dat"
         if not os.path.isfile(eq_filename):
@@ -29,27 +29,17 @@ class DensityPlot:
         self.inter_b = eq_data[9]
         self.inter_ab = eq_data[10]
         self.state_a = np.loadtxt(
-            file_prefix + "_speciesA_imagtime.dat", dtype=np.complex128
+            file_prefix + "_speciesA_job{}_imagtime.dat".format(job_id),
+            dtype=np.complex128,
         ).reshape(self.theta.size, self.phi.size)
         self.state_b = np.loadtxt(
-            file_prefix + "_speciesB_imagtime.dat", dtype=np.complex128
+            file_prefix + "_speciesB_job{}_imagtime.dat".format(job_id),
+            dtype=np.complex128,
         ).reshape(self.theta.size, self.phi.size)
         self.abs_square_a = abs(self.state_a) ** 2
         self.abs_square_b = abs(self.state_b) ** 2
-        self.view_tool = view_tool
 
-    def show_in_one_sphere(self):
-        fig = plt.figure(figsize=plt.figaspect(1.0))
-        ax = fig.gca(projection="3d")
-        colors_a = self.__rgba_colors("red", self.abs_square_a)
-        colors_b = self.__rgba_colors("blue", self.abs_square_b)
-        surf_a = self.__plot_rgba_sphere(ax, 1.0, colors_a)
-        surf_b = self.__plot_rgba_sphere(ax, 1.0, colors_b)
-        ax.set_axis_off()
-        self.__set_view_angle_mpl(ax)
-        plt.show()
-
-    def show_in_two_spheres(self):
+    def show_matplotlib(self):
         # create figure
         fig = plt.figure(figsize=(8, 6))
         axa = fig.add_subplot(121, projection="3d")
@@ -58,6 +48,8 @@ class DensityPlot:
         self.__plot_cmap_sphere(fig, axb, self.abs_square_b)
         axa.set_title("$|\Psi_1(\\theta,\phi)|^2$")
         axb.set_title("$|\Psi_2(\\theta,\phi)|^2$")
+        axa.set_axis_off()
+        axb.set_axis_off()
         plt.show()
         # plt.savefig("teste.png", dpi=1024, bbox_inches="tight")
 
@@ -100,13 +92,6 @@ class DensityPlot:
         self.__mayavi_sphere(self.abs_square_b, offset=(2.5, 0.0, 0.0))
         mlab.show()
 
-    def __mayavi_sphere(self, den, radius=1, offset=(0, 0, 0), cmap="hot"):
-        x, y, z = self.__cartesian_grid(radius, offset)
-        if self.__density_contrast(den) < 0.1:
-            mlab.mesh(x, y, z, color=(1, 0, 0))
-        else:
-            mlab.mesh(x, y, z, scalars=den, colormap=cmap)
-
     def __cartesian_grid(self, radius=1, offset=(0, 0, 0)):
         phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
         # sphere of unit radius
@@ -141,43 +126,6 @@ class DensityPlot:
         rotation = phi_den_max * 180.0 / np.pi
         mlab.view(elevation=elevation, azimuth=rotation)
 
-    def __rgba_colors(self, main_color, abs_square, contrast_threshold=0.10):
-        if main_color == "red":
-            rgb = np.array([1.0, 0.15, 0.15])
-            fixed_opacity = 0.7
-            slope_factor = 4.5
-            x0 = 0.4
-        else:
-            rgb = np.array([0.3, 0.3, 1.0])
-            fixed_opacity = 0.2
-            slope_factor = 4.0
-            x0 = 0.6
-        if self.__density_contrast(abs_square) < contrast_threshold:
-            opacity = np.ones([self.theta.size, self.phi.size]) * fixed_opacity
-        else:
-            normalized = self.__normalize_density(abs_square)
-            opacity = (np.tanh((normalized - x0) * slope_factor) + 1) / 2
-        rgba_colors = np.zeros([self.theta.size, self.phi.size, 4])
-        for i in range(self.theta.size):
-            for j in range(self.phi.size):
-                rgba_colors[i, j, :3] = rgb
-                rgba_colors[i, j, 3] = opacity[i, j]
-        return rgba_colors
-
-    def __plot_rgba_sphere(self, ax, radius, colors):
-        x, y, z = self.__cartesian_grid(radius)
-        surface = ax.plot_surface(
-            x,
-            y,
-            z,
-            rstride=1,
-            cstride=1,
-            facecolors=colors,
-            linewidth=0,
-            antialiased=False,
-        )
-        return surface
-
     def __plot_cmap_sphere(self, fig, ax, den, radius=1):
         x, y, z = self.__cartesian_grid(radius)
         den_colors = self.__normalize_density(den)
@@ -200,16 +148,22 @@ class DensityPlot:
             shrink=0.4,
         )
 
-
-def run(data_path, prefix, view_tool, view_mode):
-    data_plotting = DensityPlot(data_path, prefix)
-    if view_tool == "matplotlib":
-        if view_mode == 1:
-            data_plotting.show_in_one_sphere()
+    def __mayavi_sphere(self, den, radius=1, offset=(0, 0, 0), cmap="hot"):
+        x, y, z = self.__cartesian_grid(radius, offset)
+        if self.__density_contrast(den) < 0.1:
+            mlab.mesh(x, y, z, color=(1, 0, 0))
         else:
-            data_plotting.show_in_two_spheres()
+            mlab.mesh(x, y, z, scalars=den, colormap=cmap)
+
+
+def run(data_path, prefix, view_tool, oriented):
+    data_plotting = DensityPlot(data_path, prefix)
+    if view_tool not in ["matplotlib", "mayavi"]:
+        raise IOError("Unrecognize visualization tool {}".format(view_tool))
+    if view_tool == "matplotlib":
+        data_plotting.show_matplotlib()
     else:
-        if view_mode == 1:
+        if oriented:
             data_plotting.show_mayavi_oriented()
         else:
             data_plotting.show_mayavi_raw()
@@ -217,13 +171,16 @@ def run(data_path, prefix, view_tool, view_mode):
 
 
 if __name__ == "__main__":
-    root_dir = os.path.join(
+    default_output_dir = os.path.join(
         os.path.expanduser("~"), "programs/bec_spherical_shell/output"
     )
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(
+        usage="python %(prog)s file_name_prefix [optional_args] ",
+        description="Visualize density plots in a sphere",
+    )
     p.add_argument(
-        "--job-prefix",
-        dest="prefix",
+        "prefix",
+        metavar="file_name_prefix",
         type=str,
         help="prefix for file names = string before the first underscore",
     )
@@ -231,25 +188,20 @@ if __name__ == "__main__":
         "--data-path",
         dest="data_path",
         type=str,
-        default=root_dir,
+        default=default_output_dir,
         help="path to output file generated after time evolution",
     )
     p.add_argument(
         "--view-tool",
         dest="view_tool",
         type=str,
-        default="matplotlib",
-        help="Tool to plot : `matplotlib` or `mayavi`",
+        default="mayavi",
+        help="Tool to plot : `matplotlib` or `mayavi` (default)",
     )
     p.add_argument(
-        "--view-mode",
-        dest="view_mode",
-        type=int,
-        default=1,
-        help="1 matplotlib : red and blue alpha channels\n"
-        "2 matplotlib : separate sphere with colormaps\n"
-        "1 mayavi : spheres aligned according to max-min axis\n"
-        "2 mayavi : spheres along x-axis",
+        "-oriented",
+        action="store_true",
+        help="Whether to rotate view angle to align spheres",
     )
     args = p.parse_args()
     run(**vars(args))

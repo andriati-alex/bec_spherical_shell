@@ -208,7 +208,7 @@ void _propagate_linear(
         cn_solution = carrDef(ntheta);
         aux_workspace = carrDef(ntheta);
 
-        #pragma omp for private(j)
+        #pragma omp for
         for (j = 0; j < ntheta; j++)
         {
             DftiComputeForward(desc, &phi_fft[j*nphi]);
@@ -485,8 +485,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
 /** Imaginary time evolution for two component system in spherical shell
     --------------------------------------------------------------------
     Given initial conditions, discretized functions of theta and phi,
-    this function propaga in imaginary time to converge the initial
-    condition to the system's ground state.
+    this function propagate in imaginary time to converge the initial
+    condition to system's ground state.
 
     Input Parameters
     ----------------
@@ -716,6 +716,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         carrCopy(grid_points, phi_fft, Sb);
 
         // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
+        // Note that the interaction potential will be updated
 
         carrAbs2(grid_points, Sa, abs_square_a);
         carrAbs2(grid_points, Sb, abs_square_b);
