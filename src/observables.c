@@ -187,83 +187,50 @@ void abs_grad_sphere_square(
 {
     int
         j,
-        i_phi,
-        phi_point,
-        pi_rotation;
+        i,
+        grid_pt;
     double
+        sin_tht,
         dtheta;
     double complex
         z1,
         z2;
     Carray
-        ds_dphi,
         grad_phi,
         grad_theta;
 
     dtheta = theta[1] - theta[0];
 
-    ds_dphi = carrDef(nphi * ntheta);
     grad_phi = carrDef(nphi * ntheta);
     grad_theta = carrDef(nphi * ntheta);
 
+    sph_theta_derivative(nphi, ntheta, state, dtheta, grad_theta);
+    sph_phi_derivative(nphi, ntheta, state, dphi, grad_phi);
+
     for (j = 1; j < ntheta - 1; j++)
     {
-        // Compute gradient in phi axis
-        derivative_1dperiodic(nphi, &state[j*nphi], dphi, &ds_dphi[j*nphi]);
-        carrScalarMultiply(
-                nphi, &ds_dphi[j*nphi], 1.0 / sin(theta[j]), &grad_phi[j*nphi]
-        );
-        // Compute gradient in theta axis
-        for (i_phi = 0; i_phi < nphi; i_phi++)
+        sin_tht = sin(theta[j]);
+        for (i = 0; i < nphi; i++)
         {
-            grad_theta[j * nphi + i_phi] = (
-                    (state[(j + 1) * nphi + i_phi]
-                    - state[(j - 1) * nphi + i_phi]) / (2 * dtheta)
-            );
+            grid_pt = j * nphi + i;
+            grad_phi[grid_pt] = grad_phi[grid_pt] / sin_tht;
         }
     }
 
-    // compute derivatives at poles theta = 0 and theta = PI following:
-    // 1. backward point in theta = 0 is the forward one rotated PI in phi
-    // 2. forward point in theta = PI is the backward one rotated PI in phi
-    // 3. Avoid exceeding boundary if PI rotation yield phi > 2 * PI
-    for (i_phi = 0; i_phi < nphi; i_phi++)
-    {
-        phi_point = nphi + i_phi;
-        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
-        grad_theta[i_phi] = (
-                (state[phi_point] - state[phi_point + pi_rotation])
-                / ( 2 * dtheta)
-        );
-    }
-    for (i_phi = 0; i_phi < nphi; i_phi++)
-    {
-        phi_point = (ntheta - 2) * nphi + i_phi;
-        pi_rotation = nphi / 2 - (i_phi / (nphi / 2 + 1)) * (nphi - 1);
-        grad_theta[(ntheta - 1) * nphi + i_phi] = (
-                (state[phi_point + pi_rotation] - state[phi_point])
-                / ( 2 * dtheta)
-        );
-    }
-
-    // at the poles the function is constant with respect to phi
-    carrFill(nphi, 0.0 + 0.0 * I, &grad_phi[0]);
-    carrFill(nphi, 0.0 + 0.0 * I, &grad_phi[(ntheta-1)*nphi]);
-
     for (j = 0; j < ntheta; j++)
     {
-        for (i_phi = 0; i_phi < nphi; i_phi++)
+        for (i = 0; i < nphi; i++)
         {
-            z1 = grad_phi[j * nphi + i_phi];
-            z2 = grad_theta[j * nphi + i_phi];
-            abs_grad_square[j * nphi + i_phi] = (
+            grid_pt = j * nphi + i;
+            z1 = grad_phi[grid_pt];
+            z2 = grad_theta[grid_pt];
+            abs_grad_square[grid_pt] = (
                     creal(z1) * creal(z1) + cimag(z1) * cimag(z1)
                     + creal(z2) * creal(z2) + cimag(z2) * cimag(z2)
             );
         }
     }
 
-    free(ds_dphi);
     free(grad_phi);
     free(grad_theta);
 }

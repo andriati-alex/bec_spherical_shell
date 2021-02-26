@@ -162,14 +162,14 @@ if __name__ == "__main__":
     # Configure domain
     f = open(os.path.join(args.input_dir, "opt_state_domain.dat"), "w")
     f.write(
-        "{} {} {} {}".format(args.phi_pts, args.tht_pts, args.dt, args.ndt)
+        "{} {} {} {}\n".format(args.phi_pts, args.tht_pts, args.dt, args.ndt)
     )
     f.close()
 
     # Default values are set for equation parameters
     f = open(os.path.join(args.input_dir, "opt_state_eq.dat"), "w")
     f.write(
-        "-0.5 0.0 {:.2f} {:.2f} {:.5f} {:.5f} {:.5f}".format(
+        "-0.5 0.0 {:.2f} {:.2f} {:.5f} {:.5f} {:.5f}\n".format(
             args.frac_a, args.frac_b, args.ga, args.gb, args.gab
         )
     )
