@@ -39,6 +39,10 @@ void pkg_states(Carray, Carray, TwoSpeciesState);
 
 void unpkg_states(Carray, Carray, TwoSpeciesState);
 
+void set_states_from_parts(TwoSpeciesState);
+
+void set_states_real_imag(TwoSpeciesState);
+
 
 
 void rmatFree(int m, Rmatrix M); // Release real matrix with m rows

@@ -11,7 +11,8 @@ obj = memoryHandling.o 	   \
 	  calculus.o           \
 	  observables.o        \
 	  inout.o              \
-	  imagtimeIntegrator.o
+	  imagtimeIntegrator.o \
+	  newtonCG.o
 
 
 
@@ -25,6 +26,10 @@ obj = memoryHandling.o 	   \
 
 time_evolution : libgp.a exe/time_evolution.c
 	icc -o ./bin/time_evolution exe/time_evolution.c -lm -mkl -qopenmp \
+		-L./lib -I./include -lgp -O3
+
+newton_stationary : libgp.a exe/newton.c
+	icc -o ./bin/newton exe/newton.c -lm -mkl -qopenmp \
 		-L./lib -I./include -lgp -O3
 
 
@@ -63,8 +68,8 @@ calculus.o : src/calculus.c
 observables.o : src/observables.c
 	icc -c -O3 -qopenmp -I./include src/observables.c
 
-newtoncg.o : src/newtoncg.c
-	icc -c -O3 -qopenmp -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -I./include src/newtoncg.c
+newtonCG.o : src/newtonCG.c
+	icc -c -O3 -qopenmp -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -I./include src/newtonCG.c
 
 imagtimeIntegrator.o : src/imagtimeIntegrator.c
 	icc -c -O3 -qopenmp -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -I./include src/imagtimeIntegrator.c

@@ -67,7 +67,9 @@ double avg_residue(
         grid_res,
         nabla2phi,
         der2tht,
-        der_tht;
+        der_tht,
+        laplace_a,
+        laplace_b;
 
     // unpack equation data
     tht = EQ->theta;
@@ -86,6 +88,8 @@ double avg_residue(
     abs_square_a = rarrDef(nphi * ntht);
     abs_square_b = rarrDef(nphi * ntht);
     grid_res = carrDef(nphi * ntht);
+    laplace_a = carrDef(nphi * ntht);
+    laplace_b = carrDef(nphi * ntht);
 
     sum_grid_res = 0;
 
@@ -93,6 +97,8 @@ double avg_residue(
     carrAbs2(nphi * ntht, state_b, abs_square_b);
 
     // Compute grid residue for species A
+
+    laplace_app(EQ, state_a, state_b, laplace_a, laplace_b);
 
     sph_theta_twice_derivative(nphi, ntht, state_a, dtht, der2tht);
     sph_theta_derivative(nphi, ntht, state_a, dtht, der_tht);
@@ -116,11 +122,7 @@ double avg_residue(
         {
             grid_pt = j * nphi + i;
             grid_res[grid_pt] = (
-                    nabla_coef * (
-                    sin_tht * der2tht[grid_pt] +
-                    cos_tht * der_tht[grid_pt] +
-                    sin_tht * nabla2phi[grid_pt]
-                    )
+                    nabla_coef * laplace_a[grid_pt] * sin_tht
                     + sin_tht * state_a[grid_pt] * (
                     ga * abs_square_a[grid_pt] + gab * abs_square_b[grid_pt]
                     )
@@ -155,11 +157,7 @@ double avg_residue(
         {
             grid_pt = j * nphi + i;
             grid_res[grid_pt] = (
-                    nabla_coef * (
-                    sin_tht * der2tht[grid_pt] +
-                    cos_tht * der_tht[grid_pt] +
-                    sin_tht * nabla2phi[grid_pt]
-                    )
+                    nabla_coef * laplace_b[grid_pt] * sin_tht
                     + sin_tht * state_b[grid_pt] * (
                     gb * abs_square_b[grid_pt] + gab * abs_square_a[grid_pt]
                     )
@@ -176,6 +174,8 @@ double avg_residue(
     free(abs_square_a);
     free(abs_square_b);
     free(grid_res);
+    free(laplace_a);
+    free(laplace_b);
 
     return cabs(sum_grid_res);
 }

@@ -245,6 +245,39 @@ double complex Csimps2D_sphere(
 }
 
 
+
+double complex sphere_inner_prod(
+        int nphi, int ntheta, Rarray theta, Carray f, double dphi)
+{
+
+/** INTEGRATE FUNCTION OF 2 VARIABLES IN SPHERICAL COORDINATES **/
+
+    unsigned int
+        j;
+    double
+        dtheta;
+    double complex
+        result;
+    Carray
+        f_theta;
+
+    dtheta = theta[1] - theta[0];
+    f_theta = carrDef(ntheta);
+
+    #pragma omp parallel for private(j) schedule(static)
+    for (j = 0; j < ntheta; j++)
+    {
+        // Integrate in phi and multiply by the jacobian term sin(theta)
+        f_theta[j] = sin(theta[j]) * Csimps1D(nphi,&f[j*nphi],dphi);
+    }
+
+    result = Csimps1D(ntheta,f_theta,dtheta);
+
+    free(f_theta);
+    return result;
+}
+
+
 void renormalize_spheric(EqDataPkg EQ, Carray S)
 {
     int
@@ -441,7 +474,6 @@ void sph_theta_derivative(
 
     for (j = 2; j < ntht - 2; j++)
     {
-
         for (i_phi = 0; i_phi < nphi; i_phi++)
         {
             adv_twice = (j + 2) * nphi + i_phi;
@@ -603,4 +635,159 @@ void sph_theta_twice_derivative(
         );
     }
 
+}
+
+
+
+void laplace_app(
+        EqDataPkg EQ,
+        Carray state_a,
+        Carray state_b,
+        Carray laplace_a,
+        Carray laplace_b)
+{
+    int
+        j,
+        i,
+        nphi,
+        ntht,
+        grid_pt;
+    double
+        dphi,
+        dtht,
+        sin_tht,
+        cos_tht;
+    double complex
+        first_order,
+        second_order,
+        avg_pole_a,
+        avg_pole_b;
+    Rarray
+        tht;
+    Carray
+        der2phi,
+        der2tht,
+        der_tht;
+
+    // unpack equation data
+    tht = EQ->theta;
+    nphi = EQ->nphi;
+    ntht = EQ->ntheta;
+    dphi = EQ->dphi;
+    dtht = tht[1] - tht[0];
+
+    der2phi = carrDef(nphi * ntht);
+    der2tht = carrDef(nphi * ntht);
+    der_tht = carrDef(nphi * ntht);
+
+    // Compute grid residue for species A
+
+    sph_theta_twice_derivative(nphi, ntht, state_a, dtht, der2tht);
+    sph_theta_derivative(nphi, ntht, state_a, dtht, der_tht);
+    sph_phi_twice_derivative(nphi, ntht, state_a, dphi, der2phi);
+
+    for (j = 1; j < ntht - 1; j++)
+    {
+        sin_tht = sin(tht[j]);
+        cos_tht = cos(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            laplace_a[grid_pt] = (
+                    der2tht[grid_pt] +
+                    der_tht[grid_pt] * cos_tht / sin_tht +
+                    der2phi[grid_pt] / sin_tht / sin_tht
+            );
+        }
+    }
+
+    sph_theta_twice_derivative(nphi, ntht, state_b, dtht, der2tht);
+    sph_theta_derivative(nphi, ntht, state_b, dtht, der_tht);
+    sph_phi_twice_derivative(nphi, ntht, state_b, dphi, der2phi);
+
+    for (j = 1; j < ntht - 1; j++)
+    {
+        sin_tht = sin(tht[j]);
+        cos_tht = cos(tht[j]);
+        for (i = 0; i < nphi; i++)
+        {
+            grid_pt = j * nphi + i;
+            laplace_b[grid_pt] = (
+                    der2tht[grid_pt] +
+                    der_tht[grid_pt] * cos_tht / sin_tht +
+                    der2phi[grid_pt] / sin_tht / sin_tht
+            );
+        }
+    }
+
+    // approximate residue at the poles using the average
+    // over the small ring at the nearest \theta grid point
+
+    avg_pole_a = 0.0;
+    avg_pole_b = 0.0;
+    for (i = 0; i < nphi; i++)
+    {
+        grid_pt = nphi + i;
+        first_order = - 0.5 * (
+                - 3 * laplace_a[grid_pt] +
+                4 * laplace_a[grid_pt + nphi] -
+                laplace_a[grid_pt + 2 * nphi]
+        );
+        second_order = 0.5 * (
+                laplace_a[grid_pt + 2 * nphi] -
+                2 * laplace_a[grid_pt + nphi] +
+                laplace_a[grid_pt]
+        );
+        avg_pole_a += (laplace_a[grid_pt] + first_order + second_order) / nphi;
+        // compute for b species
+        first_order = - 0.5 * (
+                - 3 * laplace_b[grid_pt] +
+                4 * laplace_b[grid_pt + nphi] -
+                laplace_b[grid_pt + 2 * nphi]
+        );
+        second_order = 0.5 * (
+                laplace_b[grid_pt + 2 * nphi] -
+                2 * laplace_b[grid_pt + nphi] +
+                laplace_b[grid_pt]
+        );
+        avg_pole_b += (laplace_b[grid_pt] + first_order + second_order) / nphi;
+    }
+    carrFill(nphi, avg_pole_a, &laplace_a[0]);
+    carrFill(nphi, avg_pole_b, &laplace_b[0]);
+
+    avg_pole_a = 0.0;
+    avg_pole_b = 0.0;
+    for (i = 0; i < nphi; i++)
+    {
+        grid_pt = (ntht - 2) * nphi + i;
+        first_order = 0.5 * (
+                3 * laplace_a[grid_pt] -
+                4 * laplace_a[grid_pt - nphi] +
+                laplace_a[grid_pt - 2 * nphi]
+        );
+        second_order = 0.5 * (
+                laplace_a[grid_pt - 2 * nphi] -
+                2 * laplace_a[grid_pt - nphi] +
+                laplace_a[grid_pt]
+        );
+        avg_pole_a += (laplace_a[grid_pt] + first_order + second_order) / nphi;
+        // species B
+        first_order = 0.5 * (
+                3 * laplace_b[grid_pt] -
+                4 * laplace_b[grid_pt - nphi] +
+                laplace_b[grid_pt - 2 * nphi]
+        );
+        second_order = 0.5 * (
+                laplace_b[grid_pt - 2 * nphi] -
+                2 * laplace_b[grid_pt - nphi] +
+                laplace_b[grid_pt]
+        );
+        avg_pole_b += (laplace_b[grid_pt] + first_order + second_order) / nphi;
+    }
+    carrFill(nphi, avg_pole_a, &laplace_a[(ntht - 1) * nphi]);
+    carrFill(nphi, avg_pole_b, &laplace_b[(ntht - 1) * nphi]);
+
+    free(der2phi);
+    free(der2tht);
+    free(der_tht);
 }

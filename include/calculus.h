@@ -36,6 +36,8 @@ void sph_theta_derivative(int, int, Carray, double, Carray);
 
 void sph_theta_twice_derivative(int, int, Carray, double, Carray);
 
+void laplace_app(EqDataPkg, Carray, Carray, Carray, Carray);
+
 
 
 

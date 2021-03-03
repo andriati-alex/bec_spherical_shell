@@ -247,6 +247,45 @@ void unpkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
 }
 
 
+void set_states_from_parts(TwoSpeciesState S)
+{
+    int
+        grid_pt;
+    for (int j = 0; j < S->ntht; j++)
+    {
+        for (int i = 0; i < S->nphi; i++)
+        {
+            grid_pt = j * S->nphi + i;
+            S->speca[grid_pt] =  (
+                    S->speca_re[grid_pt] + I * S->speca_im[grid_pt]
+            );
+            S->specb[grid_pt] =  (
+                    S->specb_re[grid_pt] + I * S->specb_im[grid_pt]
+            );
+        }
+    }
+}
+
+
+
+void set_states_real_imag(TwoSpeciesState S)
+{
+    int
+        grid_pt;
+    for (int j = 0; j < S->ntht; j++)
+    {
+        for (int i = 0; i < S->nphi; i++)
+        {
+            grid_pt = j * S->nphi + i;
+            S->speca_re[grid_pt] = creal(S->speca[grid_pt]);
+            S->speca_im[grid_pt] = cimag(S->speca[grid_pt]);
+            S->specb_re[grid_pt] = creal(S->specb[grid_pt]);
+            S->specb_im[grid_pt] = cimag(S->specb[grid_pt]);
+        }
+    }
+}
+
+
 
 
 
