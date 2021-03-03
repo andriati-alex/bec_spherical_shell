@@ -1,6 +1,106 @@
 #include "newtoncg.h"
 
 
+void appr_poles(int nphi, int ntht, Carray state)
+{
+    int
+        i,
+        grid_pt;
+    double complex
+        avg_pole,
+        first_order,
+        second_order;
+
+    avg_pole = 0.0;
+    for (i = 0; i < nphi; i++)
+    {
+        grid_pt = nphi + i;
+        first_order = - 0.5 * (
+                - 3 * state[grid_pt] +
+                4 * state[grid_pt + nphi] -
+                state[grid_pt + 2 * nphi]
+        );
+        second_order = 0.5 * (
+                state[grid_pt + 2 * nphi] -
+                2 * state[grid_pt + nphi] +
+                state[grid_pt]
+        );
+        avg_pole += (state[grid_pt] + first_order + second_order) / nphi;
+    }
+    carrFill(nphi, avg_pole, &state[0]);
+
+    avg_pole = 0.0;
+    for (i = 0; i < nphi; i++)
+    {
+        grid_pt = (ntht - 2) * nphi + i;
+        first_order = 0.5 * (
+                3 * state[grid_pt] -
+                4 * state[grid_pt - nphi] +
+                state[grid_pt - 2 * nphi]
+        );
+        second_order = 0.5 * (
+                state[grid_pt - 2 * nphi] -
+                2 * state[grid_pt - nphi] +
+                state[grid_pt]
+        );
+        avg_pole += (state[grid_pt] + first_order + second_order) / nphi;
+    }
+    carrFill(nphi, avg_pole, &state[(ntht - 1) * nphi]);
+}
+
+
+double inner_cg(TwoSpeciesState s1, TwoSpeciesState s2, TwoSpeciesState aux,
+        Rarray theta, double dphi)
+{
+    int
+        nphi,
+        ntht,
+        N;
+
+    nphi = s1->nphi;
+    ntht = s1->ntht;
+    N = nphi * ntht;
+
+    rarrMultiply(N, s1->speca_re, s2->speca_re, aux->speca_re);
+    rarrMultiply(N, s1->speca_im, s2->speca_im, aux->speca_im);
+    rarrMultiply(N, s1->specb_re, s2->specb_re, aux->specb_re);
+    rarrMultiply(N, s1->specb_im, s2->specb_im, aux->specb_im);
+    return (
+        Rsimps2D_sphere(nphi, ntht, theta, aux->speca_re, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->speca_im, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->specb_re, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->specb_im, dphi)
+    );
+}
+
+
+
+double self_inner_cg(TwoSpeciesState s, TwoSpeciesState aux,
+        Rarray theta, double dphi)
+{
+    int
+        nphi,
+        ntht,
+        N;
+
+    nphi = s->nphi;
+    ntht = s->ntht;
+    N = nphi * ntht;
+
+    rarrMultiply(N, s->speca_re, s->speca_re, aux->speca_re);
+    rarrMultiply(N, s->speca_im, s->speca_im, aux->speca_im);
+    rarrMultiply(N, s->specb_re, s->specb_re, aux->specb_re);
+    rarrMultiply(N, s->specb_im, s->specb_im, aux->specb_im);
+    return (
+        Rsimps2D_sphere(nphi, ntht, theta, aux->speca_re, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->speca_im, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->specb_re, dphi) +
+        Rsimps2D_sphere(nphi, ntht, theta, aux->specb_im, dphi)
+    );
+}
+
+
+
 void set_zero_poles_cg(TwoSpeciesState S)
 {
     int
@@ -30,15 +130,15 @@ void set_zero_poles_cg(TwoSpeciesState S)
         S->specb_re[grid_pt] = 0.0;
         S->specb_im[grid_pt] = 0.0;
     }
-    for (j = 0; j < S->ntht; j++)
+    for (j = 1; j < S->ntht - 1; j++)
     {
         grid_pt = j * S->nphi + (S->nphi - 1);
-        S->speca[grid_pt] = 0.0;
-        S->specb[grid_pt] = 0.0;
-        S->speca_re[grid_pt] = 0.0;
-        S->speca_im[grid_pt] = 0.0;
-        S->specb_re[grid_pt] = 0.0;
-        S->specb_im[grid_pt] = 0.0;
+        S->speca[grid_pt] = S->speca[j * S->nphi];
+        S->specb[grid_pt] = S->specb[j * S->nphi];
+        S->speca_re[grid_pt] = S->speca_re[j * S->nphi];
+        S->speca_im[grid_pt] = S->speca_im[j * S->nphi];
+        S->specb_re[grid_pt] = S->specb_re[j * S->nphi];
+        S->specb_im[grid_pt] = S->specb_im[j * S->nphi];
     }
 }
 
@@ -441,8 +541,6 @@ void linearized_op(
         laplace_cg(EQ, conj_grad->specb, laplace_b);
     }
 
-    set_zero_poles_cg(lin_op);
-
     for (j = 1; j < ntht - 1; j++)
     {
         for (i = 0; i < nphi - 1; i++)
@@ -508,6 +606,8 @@ void linearized_op(
     }
 
     set_states_from_parts(lin_op);
+    set_zero_poles_cg(lin_op);
+
     free(laplace_a);
     free(laplace_b);
 }
@@ -544,12 +644,15 @@ int conjgrad(
     double
         a,
         beta,
-        err;
+        err,
+        upper,
+        lower;
     TwoSpeciesState
         res,
         dir,
         prev_res,
-        lin_op;
+        lin_op,
+        inner;
 
     l = 0;
     nphi = EQ->nphi;
@@ -564,19 +667,17 @@ int conjgrad(
     // prev_res_tilde = alloc_two_species_struct(nphi, ntht);
     lin_op = alloc_two_species_struct(nphi, ntht);
     // lin_op_dag = alloc_two_species_struct(nphi, ntht);
+    inner = alloc_two_species_struct(nphi, ntht);
 
-    // linearizedOp(EQ,phir,phii,mu,fr,fi,lfr,lfi);
     linearized_op(EQ, newton, conj_grad, lin_op, mu_a, mu_b, 0);
 
     // compute residue
-    // rarrSub(nx*ny,Fr,lfr,realRes);
-    // rarrSub(nx*ny,Fi,lfi,imagRes);
-    rarrSub(nphi * ntht, newton_res->speca_re, lin_op->speca_re, res->speca_re);
-    rarrSub(nphi * ntht, newton_res->speca_im, lin_op->speca_im, res->speca_im);
-    rarrSub(nphi * ntht, newton_res->specb_re, lin_op->specb_re, res->specb_re);
-    rarrSub(nphi * ntht, newton_res->specb_im, lin_op->specb_im, res->specb_im);
-    set_zero_poles_cg(res);
+    rarrSub(N, newton_res->speca_re, lin_op->speca_re, res->speca_re);
+    rarrSub(N, newton_res->speca_im, lin_op->speca_im, res->speca_im);
+    rarrSub(N, newton_res->specb_re, lin_op->specb_re, res->specb_re);
+    rarrSub(N, newton_res->specb_im, lin_op->specb_im, res->specb_im);
     set_states_from_parts(res);
+    set_zero_poles_cg(res);
 
     // pkg_states(res->speca, res->specb, res_tilde);
     // pkg_states(res->speca, res->specb, dir_tilde);
@@ -591,7 +692,7 @@ int conjgrad(
     );
 
     err = maxNorm(N, res->speca) + maxNorm(N, res->specb);
-    printf("\t\t%.8lf", err);
+    printf("\n\t%.8lf", err);
 
     while (err > tol)
     {
@@ -604,21 +705,14 @@ int conjgrad(
         linearized_op(EQ, newton, dir, lin_op, mu_a, mu_b, 0);
         // linearized_op(EQ, newton, dir_tilde, lin_op_dag, mu_a, mu_b, 1);
 
+        upper = self_inner_cg(res, inner, EQ->theta, EQ->dphi);
+        lower = inner_cg(dir, lin_op, inner, EQ->theta, EQ->dphi);
+        // printf("\n\t%8d   %.5lf   %.5lf", l, upper, lower);
+
         // scalar to update solution and residue
-        a = (
-                (
-                    rarrDot(N, res->speca_re, res->speca_re) +
-                    rarrDot(N, res->speca_im, res->speca_im) +
-                    rarrDot(N, res->specb_re, res->specb_re) +
-                    rarrDot(N, res->specb_im, res->specb_im)
-                ) /
-                (
-                    rarrDot(N, dir->speca_re, lin_op->speca_re) +
-                    rarrDot(N, dir->speca_im, lin_op->speca_im) +
-                    rarrDot(N, dir->specb_re, lin_op->specb_re) +
-                    rarrDot(N, dir->specb_im, lin_op->specb_im)
-                )
-        );
+        a = upper / lower;
+
+        // printf("\n\t%.8lf  %.8lf", upper, lower);
 
         // record residue from this iteration to safely update
         pkg_states(res->speca, res->specb, prev_res);
@@ -639,6 +733,7 @@ int conjgrad(
                 N, prev_res->specb_im, - a, lin_op->specb_im, res->specb_im
         );
         set_states_from_parts(res);
+        set_zero_poles_cg(res);
 
         rarrUpdate(
                 N, conj_grad->speca_re, a, dir->speca_re, conj_grad->speca_re
@@ -653,36 +748,37 @@ int conjgrad(
                 N, conj_grad->specb_im, a, dir->specb_im, conj_grad->specb_im
         );
         set_states_from_parts(conj_grad);
+        set_zero_poles_cg(conj_grad);
 
+        upper = self_inner_cg(res, inner, EQ->theta, EQ->dphi);
+        lower = self_inner_cg(prev_res, inner, EQ->theta, EQ->dphi);
         // scalar to update direction
-        beta = (
-                (
-                    rarrDot(N, res->speca_re, res->speca_re) +
-                    rarrDot(N, res->speca_im, res->speca_im) +
-                    rarrDot(N, res->specb_re, res->specb_re) +
-                    rarrDot(N, res->specb_im, res->specb_im)
-                ) /
-                (
-                    rarrDot(N, prev_res->speca_re, prev_res->speca_re) +
-                    rarrDot(N, prev_res->speca_im, prev_res->speca_im) +
-                    rarrDot(N, prev_res->specb_re, prev_res->specb_re) +
-                    rarrDot(N, prev_res->specb_im, prev_res->specb_im)
-                )
-        );
+        beta = upper / lower;
 
         rarrUpdate(N, res->speca_re, beta, dir->speca_re, dir->speca_re);
         rarrUpdate(N, res->speca_im, beta, dir->speca_im, dir->speca_im);
         rarrUpdate(N, res->specb_re, beta, dir->specb_re, dir->specb_re);
         rarrUpdate(N, res->specb_im, beta, dir->specb_im, dir->specb_im);
+        set_states_from_parts(dir);
+        set_zero_poles_cg(dir);
 
-        err = (
-                rarrMod(nphi * ntht, res->speca_re) +
-                rarrMod(nphi * ntht, res->speca_im) +
-                rarrMod(nphi * ntht, res->specb_re) +
-                rarrMod(nphi * ntht, res->specb_im)
-        );
+        err = upper;
 
-        printf("\n\t%.6lf", err);
+        if (l % 50 == 0)
+        {
+            linearized_op(EQ, newton, conj_grad, lin_op, mu_a, mu_b, 0);
+            // compute residue
+            rarrSub(N, newton_res->speca_re, lin_op->speca_re, res->speca_re);
+            rarrSub(N, newton_res->speca_im, lin_op->speca_im, res->speca_im);
+            rarrSub(N, newton_res->specb_re, lin_op->specb_re, res->specb_re);
+            rarrSub(N, newton_res->specb_im, lin_op->specb_im, res->specb_im);
+            set_states_from_parts(res);
+            set_zero_poles_cg(res);
+
+            err = self_inner_cg(res, inner, EQ->theta, EQ->dphi);
+
+            printf("\n\t%.8lf", err);
+        }
 
         l = l + 1; // Update iteration counter
 
@@ -756,6 +852,9 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     abs_square_a = rarrDef(N);
     abs_square_b = rarrDef(N);
 
+    appr_poles(nphi, ntht, Sa);
+    appr_poles(nphi, ntht, Sb);
+
     carrAbs2(N, Sa, abs_square_a);
     carrAbs2(N, Sb, abs_square_b);
     norm_a = sqrt(Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_a, dphi));
@@ -766,6 +865,8 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     grid_residue(EQ, Sa, Sb, grid_res_a, grid_res_b, mu_a, mu_b);
     error_a = maxNorm(N, grid_res_a);
     error_b = maxNorm(N, grid_res_b);
+    error_a = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
+    error_b = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
 
     // right hand side of linear operator passed to iteratice CG method
     for (i = 0; i < N; i++)
@@ -802,22 +903,26 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
         }
         else
         {
-            CGtol = 1E-4 * (error_a + error_b);
+            CGtol = 1E-6 * (error_a + error_b);
         }
         // set_zero_poles_cg(newton_res);
         CGiter = conjgrad(
-                EQ, mu_a, mu_b, newton_step, newton_res, conj_grad, CGtol
+                EQ, mu_a, mu_b, newton_step, newton_res, conj_grad, 1E-8
         );
 
         // update solution from newton iteration
         carrAdd(N, Sa, conj_grad->speca, Sa);
         carrAdd(N, Sb, conj_grad->specb, Sb);
+        appr_poles(nphi, ntht, Sa);
+        appr_poles(nphi, ntht, Sb);
 
         grid_residue(
                 EQ, Sa, Sb, grid_res_a, grid_res_b, mu_a, mu_b
         );
         error_a = maxNorm(N, grid_res_a);
         error_b = maxNorm(N, grid_res_b);
+        error_a = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
+        error_b = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
 
         for (i = 0; i < N; i++)
         {
