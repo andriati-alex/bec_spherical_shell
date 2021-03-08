@@ -245,39 +245,6 @@ double complex Csimps2D_sphere(
 }
 
 
-
-double complex sphere_inner_prod(
-        int nphi, int ntheta, Rarray theta, Carray f, double dphi)
-{
-
-/** INTEGRATE FUNCTION OF 2 VARIABLES IN SPHERICAL COORDINATES **/
-
-    unsigned int
-        j;
-    double
-        dtheta;
-    double complex
-        result;
-    Carray
-        f_theta;
-
-    dtheta = theta[1] - theta[0];
-    f_theta = carrDef(ntheta);
-
-    #pragma omp parallel for private(j) schedule(static)
-    for (j = 0; j < ntheta; j++)
-    {
-        // Integrate in phi and multiply by the jacobian term sin(theta)
-        f_theta[j] = sin(theta[j]) * Csimps1D(nphi,&f[j*nphi],dphi);
-    }
-
-    result = Csimps1D(ntheta,f_theta,dtheta);
-
-    free(f_theta);
-    return result;
-}
-
-
 void renormalize_spheric(EqDataPkg EQ, Carray S)
 {
     int
@@ -298,59 +265,6 @@ void renormalize_spheric(EqDataPkg EQ, Carray S)
 
     for (i = 0; i < grid_points; i++) S[i] = S[i] / sqrt(old_norm);
     free(abs_square);
-}
-
-
-
-void renormalize(int nx, int ny, Carray f, double hx, double hy, double norm)
-{
-
-    int
-        i;
-
-    double
-        renorm;
-
-    Rarray
-        ModSquared;
-
-    ModSquared = rarrDef(nx*ny);
-
-    carrAbs2(nx*ny,f,ModSquared);
-
-    renorm = norm * sqrt(1.0 / Rsimps2D(nx,ny,ModSquared,hx,hy));
-
-    for (i = 0; i < nx*ny; i++) f[i] = f[i] * renorm;
-
-    free(ModSquared);
-}
-
-
-
-
-
-void renormalizeReal(int nx, int ny, Rarray f, double hx, double hy,
-                     double norm)
-{
-
-    int
-        i;
-
-    double
-        renorm;
-
-    Rarray
-        f2;
-
-    f2 = rarrDef(nx*ny);
-
-    for (i = 0; i < nx*ny; i++) f2[i] = f[i] * f[i];
-
-    renorm = norm * sqrt(1.0 / Rsimps2D(nx,ny,f2,hx,hy));
-
-    for (i = 0; i < nx*ny; i++) f[i] = f[i] * renorm;
-
-    free(f2);
 }
 
 
@@ -538,6 +452,11 @@ void sph_theta_derivative(
         );
     }
 
+    for (j = 0; j < ntht; j++)
+    {
+        der[j * nphi + nphi - 1] = der[j * nphi];
+    }
+
 }
 
 
@@ -633,6 +552,11 @@ void sph_theta_twice_derivative(
                 - f[bck_twice] - f[adv_twice] + 16 * (f[adv] + f[bck])
                 - 30 * f[pnt]
         );
+    }
+
+    for (j = 0; j < ntht; j++)
+    {
+        der[j * nphi + nphi - 1] = der[j * nphi];
     }
 
 }

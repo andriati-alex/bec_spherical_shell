@@ -50,14 +50,10 @@ double avg_residue(
         grid_pt;
     double
         dphi,
-        dtht,
         nabla_coef,
         ga,
         gb,
         gab,
-        sin_tht,
-        cos_tht;
-    double complex
         sum_grid_res;
     Rarray
         tht,
@@ -65,9 +61,6 @@ double avg_residue(
         abs_square_b;
     Carray
         grid_res,
-        nabla2phi,
-        der2tht,
-        der_tht,
         laplace_a,
         laplace_b;
 
@@ -76,15 +69,11 @@ double avg_residue(
     nphi = EQ->nphi;
     ntht = EQ->ntheta;
     dphi = EQ->dphi;
-    dtht = tht[1] - tht[0];
     nabla_coef = EQ->nabla_coef;
     ga = EQ->ga;
     gb = EQ->gb;
     gab = EQ->gab;
 
-    nabla2phi = carrDef(nphi * ntht);
-    der2tht = carrDef(nphi * ntht);
-    der_tht = carrDef(nphi * ntht);
     abs_square_a = rarrDef(nphi * ntht);
     abs_square_b = rarrDef(nphi * ntht);
     grid_res = carrDef(nphi * ntht);
@@ -100,84 +89,47 @@ double avg_residue(
 
     laplace_app(EQ, state_a, state_b, laplace_a, laplace_b);
 
-    sph_theta_twice_derivative(nphi, ntht, state_a, dtht, der2tht);
-    sph_theta_derivative(nphi, ntht, state_a, dtht, der_tht);
-    sph_phi_twice_derivative(nphi, ntht, state_a, dphi, nabla2phi);
-
-    for (j = 1; j < ntht - 1; j++)
-    {
-        sin_tht = sin(tht[j]);
-        for (i = 0; i < nphi; i++)
-        {
-            grid_pt = j * nphi + i;
-            nabla2phi[grid_pt] = nabla2phi[grid_pt] / sin_tht / sin_tht;
-        }
-    }
-
     for (j = 0; j < ntht; j++)
     {
-        sin_tht = sin(tht[j]);
-        cos_tht = cos(tht[j]);
         for (i = 0; i < nphi; i++)
         {
             grid_pt = j * nphi + i;
             grid_res[grid_pt] = (
-                    nabla_coef * laplace_a[grid_pt] * sin_tht
-                    + sin_tht * state_a[grid_pt] * (
+                    nabla_coef * laplace_a[grid_pt]
+                    + state_a[grid_pt] * (
                     ga * abs_square_a[grid_pt] + gab * abs_square_b[grid_pt]
                     )
-                    - sin_tht * mu_a * state_a[grid_pt]
+                    - mu_a * state_a[grid_pt]
             );
         }
     }
 
-    sum_grid_res = Csimps2D(nphi, ntht, grid_res, dphi, dtht);
-
-    // Compute grid residue for species B
-
-    sph_theta_twice_derivative(nphi, ntht, state_b, dtht, der2tht);
-    sph_theta_derivative(nphi, ntht, state_b, dtht, der_tht);
-    sph_phi_twice_derivative(nphi, ntht, state_b, dphi, nabla2phi);
-
-    for (j = 1; j < ntht - 1; j++)
-    {
-        sin_tht = sin(tht[j]);
-        for (i = 0; i < nphi; i++)
-        {
-            grid_pt = j * nphi + i;
-            nabla2phi[grid_pt] = nabla2phi[grid_pt] / sin_tht / sin_tht;
-        }
-    }
+    sum_grid_res = cabs(Csimps2D_sphere(nphi, ntht, tht, grid_res, dphi));
 
     for (j = 0; j < ntht; j++)
     {
-        sin_tht = sin(tht[j]);
-        cos_tht = cos(tht[j]);
         for (i = 0; i < nphi; i++)
         {
             grid_pt = j * nphi + i;
             grid_res[grid_pt] = (
-                    nabla_coef * laplace_b[grid_pt] * sin_tht
-                    + sin_tht * state_b[grid_pt] * (
+                    nabla_coef * laplace_b[grid_pt]
+                    + state_b[grid_pt] * (
                     gb * abs_square_b[grid_pt] + gab * abs_square_a[grid_pt]
                     )
-                    - sin_tht * mu_b * state_b[grid_pt]
+                    - mu_b * state_b[grid_pt]
             );
         }
     }
 
-    sum_grid_res = sum_grid_res + Csimps2D(nphi, ntht, grid_res, dphi, dtht);
+    sum_grid_res += cabs(Csimps2D_sphere(nphi, ntht, tht, grid_res, dphi));
 
-    free(nabla2phi);
-    free(der2tht);
-    free(der_tht);
     free(abs_square_a);
     free(abs_square_b);
     free(grid_res);
     free(laplace_a);
     free(laplace_b);
 
-    return cabs(sum_grid_res);
+    return sum_grid_res;
 }
 
 

@@ -668,6 +668,17 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     printf("\n\nProgrs  Energy       Kinect");
     printf("       mu_a         mu_b         overlap");
     sepline();
+    carrAbs2(grid_points, Sa, abs_square_a);
+    carrAbs2(grid_points, Sb, abs_square_b);
+    energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
+    den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
+    printf("%5.1lf%%", 0.0);
+    lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
+    lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+    residue = avg_residue(EQ, Sa, Sb, mu_a, mu_b);
+    printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
+            energy, kin_energy, mu_a, mu_b, den_overlap);
+    printf("  %11.8lf  %11.8lf   %11.8lf\n", lza, lzb, residue);
 
     // Start time evolution
     for (k = 0; k < EQ->nt; k++)
