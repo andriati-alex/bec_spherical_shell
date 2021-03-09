@@ -17,6 +17,24 @@ void carrFill(int n, double complex z, Carray v)
 }
 
 
+void carrRandom(int n, int seed, Carray v)
+{
+    int
+        i;
+    double
+        real,
+        imag;
+
+    srandom(seed);
+    for (i = 0; i < n; i++)
+    {
+        real = random() - 0.5 * RAND_MAX;
+        imag = random() - 0.5 * RAND_MAX;
+        v[i] = 0.2 * (real - I * imag) / RAND_MAX;
+    }
+}
+
+
 
 void rarrFill(int n, double x, Rarray v)
 {
@@ -163,6 +181,14 @@ void carrMultiply(int n, Carray v1, Carray v2, Carray v)
     int i;
 
     for (i = 0; i < n; i++) v[i] = v1[i] * v2[i];
+}
+
+
+void carrConjMultiply(int n, Carray v1, Carray v2, Carray v)
+{
+    int i;
+
+    for (i = 0; i < n; i++) v[i] = conj(v1[i]) * v2[i];
 }
 
 

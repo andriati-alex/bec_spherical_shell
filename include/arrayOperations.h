@@ -9,6 +9,7 @@
 #include "dataStructures.h"
 
 
+void carrRandom(int n, int seed, Carray v);
 
 void carrFill(int n, double complex z, Carray v);
 void rarrFill(int n, double x, Rarray v);
@@ -59,6 +60,7 @@ void carrSub(int n, Carray v1, Carray v2, Carray v);
 void rarrSub(int n, Rarray v1, Rarray v2, Rarray v);
 // Element-wise subtraction. convention v1 - v2
 
+void carrConjMultiply(int n, Carray v1, Carray v2, Carray v);
 void carrMultiply(int n, Carray v1, Carray v2, Carray v);
 void rarrMultiply(int n, Rarray v1, Rarray v2, Rarray v);
 // Element-wise product v1 x v2

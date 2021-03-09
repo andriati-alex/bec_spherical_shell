@@ -229,6 +229,28 @@ TwoSpeciesState alloc_two_species_struct(int nphi, int ntheta)
 }
 
 
+void set_states_from_parts(TwoSpeciesState S)
+{
+    for (int j = 0; j < S->ntht * S->nphi; j++)
+    {
+        S->speca[j] = S->speca_re[j] + I * S->speca_im[j];
+        S->specb[j] = S->specb_re[j] + I * S->specb_im[j];
+    }
+}
+
+
+void set_states_real_imag(TwoSpeciesState S)
+{
+    for (int j = 0; j < S->ntht * S->nphi; j++)
+    {
+        S->speca_re[j] = creal(S->speca[j]);
+        S->speca_im[j] = cimag(S->speca[j]);
+        S->specb_re[j] = creal(S->specb[j]);
+        S->specb_im[j] = cimag(S->specb[j]);
+    }
+}
+
+
 void pkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
 {
     carrCopy(S->nphi * S->ntht, Sa, S->speca);
@@ -244,45 +266,6 @@ void unpkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
 {
     carrCopy(S->nphi * S->ntht, S->speca, Sa);
     carrCopy(S->nphi * S->ntht, S->specb, Sb);
-}
-
-
-void set_states_from_parts(TwoSpeciesState S)
-{
-    int
-        grid_pt;
-    for (int j = 0; j < S->ntht; j++)
-    {
-        for (int i = 0; i < S->nphi; i++)
-        {
-            grid_pt = j * S->nphi + i;
-            S->speca[grid_pt] =  (
-                    S->speca_re[grid_pt] + I * S->speca_im[grid_pt]
-            );
-            S->specb[grid_pt] =  (
-                    S->specb_re[grid_pt] + I * S->specb_im[grid_pt]
-            );
-        }
-    }
-}
-
-
-
-void set_states_real_imag(TwoSpeciesState S)
-{
-    int
-        grid_pt;
-    for (int j = 0; j < S->ntht; j++)
-    {
-        for (int i = 0; i < S->nphi; i++)
-        {
-            grid_pt = j * S->nphi + i;
-            S->speca_re[grid_pt] = creal(S->speca[grid_pt]);
-            S->speca_im[grid_pt] = cimag(S->speca[grid_pt]);
-            S->specb_re[grid_pt] = creal(S->specb[grid_pt]);
-            S->specb_im[grid_pt] = cimag(S->specb[grid_pt]);
-        }
-    }
 }
 
 

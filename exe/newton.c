@@ -538,12 +538,25 @@ int main(int argc, char * argv[])
 
         start = omp_get_wtime();
 
-        stationaryNewton(EQ, Sa, Sb, 1E-7, 10);
+        stationaryNewton(EQ, Sa, Sb, 5E-3, 30);
 
         time_used = (double) (omp_get_wtime() - start);
         printf("\n\nTime elapsed");
         printf(" : %.0lf sec = ",time_used);
         TimePrint(time_used);
+
+        strcpy(fname, "output/");
+        strcat(fname, outfname);
+        strcat(fname, "_speciesA_job");
+        strcat(fname, line_str);
+        strcat(fname, "_imagtime.dat");
+        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+        strcpy(fname, "output/");
+        strcat(fname, outfname);
+        strcat(fname, "_speciesB_job");
+        strcat(fname, line_str);
+        strcat(fname, "_imagtime.dat");
+        carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
 
         free(Sa);
         free(Sb);
