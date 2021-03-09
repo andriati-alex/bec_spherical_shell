@@ -538,7 +538,7 @@ int main(int argc, char * argv[])
 
         start = omp_get_wtime();
 
-        stationaryNewton(EQ, Sa, Sb, 5E-3, 30);
+        stationaryFixedNorm(EQ, Sa, Sb, 5E-3, 30);
 
         time_used = (double) (omp_get_wtime() - start);
         printf("\n\nTime elapsed");

@@ -287,30 +287,6 @@ void grid_residue(
 }
 
 
-
-double maxNorm(int N, Carray S)
-{
-
-    int
-        i;
-    double
-        maxRes;
-
-    maxRes = 0;
-
-    for (i = 0; i < N; i++)
-    {
-        if (sqrt(cabs(S[i])) > maxRes)
-        {
-            maxRes = sqrt(cabs(S[i]));
-        }
-    }
-
-    return maxRes;
-}
-
-
-
 void phi_twice_der_cg(
         int nphi, int ntht, double dphi, Carray state, Carray der)
 {
@@ -546,7 +522,7 @@ void laplace_cg_dagger(
 
 void linearized_op(
         EqDataPkg EQ, TwoSpeciesState newton, TwoSpeciesState conj_grad,
-        TwoSpeciesState lin_op, double mu_a, double mu_b, int dagger)
+        TwoSpeciesState lin_op, double mu_a, double mu_b)
 {
 
     int
@@ -585,17 +561,6 @@ void linearized_op(
 
     laplace_a = carrDef(nphi * ntht);
     laplace_b = carrDef(nphi * ntht);
-
-//    if (dagger)
-//    {
-//        laplace_cg_dagger(EQ, conj_grad->speca, laplace_a);
-//        laplace_cg_dagger(EQ, conj_grad->specb, laplace_b);
-//    }
-//    else
-//    {
-//        laplace_cg(EQ, conj_grad->speca, laplace_a);
-//        laplace_cg(EQ, conj_grad->specb, laplace_b);
-//    }
 
     laplace_app(EQ, conj_grad->speca, conj_grad->specb, laplace_a, laplace_b);
 
@@ -711,7 +676,7 @@ int conjgrad_stab(
     inner = alloc_two_species_struct(nphi, ntht);
     res_star = alloc_two_species_struct(nphi, ntht);
 
-    linearized_op(EQ, newton, conj_grad, lin_op, mu_a, mu_b, 0);
+    linearized_op(EQ, newton, conj_grad, lin_op, mu_a, mu_b);
     update_state_cg(newton_res, -1.0, lin_op, res);
     pkg_states(res->speca, res->specb, dir);
     pkg_states(res->speca, res->specb, res_star);
@@ -733,7 +698,7 @@ int conjgrad_stab(
 
     while (err > tol)
     {
-        linearized_op(EQ, newton, dir, lin_op, mu_a, mu_b, 0);
+        linearized_op(EQ, newton, dir, lin_op, mu_a, mu_b);
         if (inner_cg(res_star, lin_op, inner, tht, dphi) == 0)
         {
             printf("\n\nZero Division in alpha scalar!\n\n");
@@ -744,7 +709,7 @@ int conjgrad_stab(
                 inner_cg(res_star, lin_op, inner, tht, dphi)
         );
         update_state_cg(res, -alpha_scalar, lin_op, s_aux);
-        linearized_op(EQ, newton, s_aux, lin_op_s, mu_a, mu_b, 0);
+        linearized_op(EQ, newton, s_aux, lin_op_s, mu_a, mu_b);
         if (self_inner_cg(lin_op_s, inner, tht, dphi) == 0)
         {
             printf("\n\nZero Division in omega scalar!\n\n");
@@ -769,7 +734,8 @@ int conjgrad_stab(
         if (inner_cg(res_star, prev_res, inner, tht, dphi) == 0)
         {
             printf("\n\nZero Division in beta scalar!\n\n");
-            exit(EXIT_FAILURE);
+            return it_counter;
+            // exit(EXIT_FAILURE);
         }
         beta_scalar = (
                 inner_cg(res_star, res, inner, tht, dphi) /
@@ -787,6 +753,10 @@ int conjgrad_stab(
         if (it_counter % 20 == 0)
         {
             printf("\n\titer %5d error : %.7lf", it_counter, err);
+            linearized_op(EQ, newton, conj_grad, lin_op, mu_a, mu_b);
+            update_state_cg(newton_res, -1.0, lin_op, prev_res);
+            err = sqrt(self_inner_cg(prev_res, inner, tht, dphi));
+            printf("\n\titer %5d error : %.7lf", it_counter, err);
         }
     }
 
@@ -803,7 +773,7 @@ int conjgrad_stab(
 
 
 void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
-        double err_tol, int iter_tol)
+        double err_tol, int iter_tol, double mu_a, double mu_b)
 {
 
     int
@@ -814,13 +784,7 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
         Niter,
         CGiter;
     double
-        E,
-        kin,
-        mu_a,
-        mu_b,
         dphi,
-        norm_a,
-        norm_b,
         cg_error,
         error_newton;
     Carray
@@ -849,12 +813,6 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     abs_square_a = rarrDef(N);
     abs_square_b = rarrDef(N);
 
-    carrAbs2(N, Sa, abs_square_a);
-    carrAbs2(N, Sb, abs_square_b);
-    norm_a = sqrt(Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_a, dphi));
-    norm_b = sqrt(Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_b, dphi));
-    E = functionals(EQ, Sa, Sb, &kin, &mu_a, &mu_b);
-
     grid_residue(EQ, Sa, Sb, grid_res_a, grid_res_b, mu_a, mu_b);
 
     // right hand side of linear operator passed to iteratice CG method
@@ -876,8 +834,7 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     while (error_newton > err_tol)
     {
         printf("\n%5d       %10.5lf   %6d   ", Niter, error_newton, CGiter);
-        printf("%9.5lf  %9.5lf  %9.6lf   ", E, mu_a, mu_b);
-        printf("%9.5lf  %9.6lf\n", norm_a, norm_b);
+        printf("%9.5lf  %9.6lf   ", mu_a, mu_b);
 
         // Initial guess for conjugate-gradient method
         carrFill(N, 0.0, conj_grad->speca);
@@ -886,8 +843,7 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
 
         pkg_states(Sa, Sb, newton_step);
 
-        if (0.01 * error_newton < 1E-3) cg_error = 1E-3;
-        else                            cg_error = 0.01 * error_newton;
+        cg_error = 0.25 * error_newton;
         CGiter = conjgrad_stab(
                 EQ, mu_a, mu_b, newton_step, newton_res, conj_grad, cg_error, 0
         );
@@ -918,7 +874,7 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     }
 
     printf("\n\n%5d       %10.5lf   %6d   ",Niter, error_newton, CGiter);
-    printf("%9.5lf  %9.5lf  %9.6lf", E, mu_a, mu_b);
+    printf("%9.5lf  %9.6lf", mu_a, mu_b);
     sepline();
 
     if (Niter > iter_tol)
@@ -933,4 +889,96 @@ void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
     release_two_species_state(workspace);
     free(abs_square_a);
     free(abs_square_b);
+    free(grid_res_a);
+    free(grid_res_b);
+}
+
+
+void stationaryFixedNorm(EqDataPkg EQ, Carray Sa, Carray Sb,
+        double err_tol, int iter_tol)
+{
+
+    int
+        N,
+        nphi,
+        ntht;
+    double
+        E,
+        kin,
+        aux,
+        mu_a,
+        mu_b,
+        dphi,
+        norm_a,
+        norm_b,
+        old_mu_a,
+        old_mu_b,
+        old_norm_a,
+        old_norm_b,
+        der_a,
+        der_b;
+    Rarray
+        abs_square_a,
+        abs_square_b;
+
+    nphi = EQ->nphi;
+    ntht = EQ->ntheta;
+    dphi = EQ->dphi;
+    N = nphi * ntht;
+
+    abs_square_a = rarrDef(N);
+    abs_square_b = rarrDef(N);
+
+    E = functionals(EQ, Sa, Sb, &kin, &old_mu_a, &old_mu_b);
+    stationaryNewton(EQ, Sa, Sb, err_tol, iter_tol, old_mu_a, old_mu_b);
+    carrAbs2(N, Sa, abs_square_a);
+    carrAbs2(N, Sb, abs_square_b);
+    old_norm_a = sqrt(
+            Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_a, dphi)
+    );
+    old_norm_b = sqrt(
+            Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_b, dphi)
+    );
+
+    renormalize_spheric(EQ, Sa);
+    renormalize_spheric(EQ, Sb);
+
+    while (fabs(old_norm_a - 1) > err_tol || fabs(old_norm_b - 1) > err_tol)
+    {
+        printf(
+                "\n\nstep result : %.6lf %.6lf %.6lf %.6lf %.6lf\n\n",
+                E, old_mu_a, old_mu_b, old_norm_a, old_norm_b
+        );
+
+        E = functionals(EQ, Sa, Sb, &kin, &mu_a, &mu_b);
+        stationaryNewton(EQ, Sa, Sb, 0.5 * err_tol, iter_tol, mu_a, mu_b);
+        carrAbs2(N, Sa, abs_square_a);
+        carrAbs2(N, Sb, abs_square_b);
+        norm_a = sqrt(
+                Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_a, dphi)
+        );
+        norm_b = sqrt(
+                Rsimps2D_sphere(nphi, ntht, EQ->theta, abs_square_b, dphi)
+        );
+
+        der_a = (norm_a - old_norm_a) / (mu_a - old_mu_a);
+        der_b = (norm_b - old_norm_b) / (mu_b - old_mu_b);
+        aux = mu_a;
+        mu_a = old_mu_a - (1 - norm_a) / der_a;
+        old_mu_a = aux;
+        aux = mu_b;
+        mu_b = old_mu_b - (1 - norm_b) / der_b;
+        old_mu_b = aux;
+        old_norm_a = norm_a;
+        old_norm_b = norm_b;
+    }
+
+    printf(
+            "\n\nstep result : %.6lf %.6lf %.6lf %.6lf %.6lf\n\n",
+            E, old_mu_a, old_mu_b, old_norm_a, old_norm_b
+    );
+
+    free(abs_square_a);
+    free(abs_square_b);
+
 }
