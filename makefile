@@ -28,6 +28,10 @@ time_evolution : libgp.a exe/time_evolution.c
 	icc -o ./bin/time_evolution exe/time_evolution.c -lm -mkl -qopenmp \
 		-L./lib -I./include -lgp -O3
 
+theta_time_evolution : libgp.a exe/theta_time_evolution.c
+	icc -o ./bin/theta_time_evolution exe/theta_time_evolution.c \
+		-lm -mkl -qopenmp -L./lib -I./include -lgp -O3
+
 newton_stationary : libgp.a exe/newton.c
 	icc -o ./bin/newton exe/newton.c -lm -mkl -qopenmp \
 		-L./lib -I./include -lgp -O3

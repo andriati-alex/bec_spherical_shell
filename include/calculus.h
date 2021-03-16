@@ -20,7 +20,9 @@ double complex Csimps2D_sphere(int, int, Rarray, Carray, double);
 
 void renormalize(int, int, Carray, double, double, double);
 
-void renormalize_spheric(EqDataPkg EQ, Carray S);
+void renormalize_spheric(EqDataPkg, Carray);
+
+void renormalize_theta_sphere(EqDataPkg, Carray);
 
 void renormalizeReal(int, int, Rarray, double, double, double);
 
@@ -37,6 +39,10 @@ void sph_theta_derivative(int, int, Carray, double, Carray);
 void sph_theta_twice_derivative(int, int, Carray, double, Carray);
 
 void laplace_app(EqDataPkg, Carray, Carray, Carray, Carray);
+
+void derivative_1dreflection(int, Carray, double, Carray, int);
+
+void twice_derivative_1dreflection(int, Carray, double, Carray, int);
 
 
 

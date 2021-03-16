@@ -387,11 +387,9 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
     );
     (* mu_a) = (
             Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_a, dphi)
-            - omega * lza
     );
     (* mu_b) = (
             Rsimps2D_sphere(nphi, ntheta, theta, Integ_mu_b, dphi)
-            - omega * lzb
     );
 
     free(abs_grad_square_a);
@@ -404,6 +402,167 @@ double functionals(EqDataPkg EQ, Carray state_a, Carray state_b,
     free(Integ);
 
     return total_energy;
+}
+
+
+double functionals_theta(EqDataPkg EQ, Carray state_a, Carray state_b,
+        double * kin, double * mu_a, double * mu_b, int azi_a, int azi_b)
+{
+
+    int
+        j,
+        ntheta;
+    double
+        sin_th,
+        dtheta,
+        nabla_part_a,
+        nabla_part_b,
+        total_energy,
+        ga,
+        gb,
+        gab,
+        frac_a,
+        frac_b,
+        nabla_coef;
+    Carray
+        der_a,
+        der_b;
+    Rarray
+        theta,
+        Integ,
+        Integ_kin,
+        Integ_mu_a,
+        Integ_mu_b,
+        abs_square_der_a,
+        abs_square_der_b,
+        abs_square_a,
+        abs_square_b;
+
+    ntheta = EQ->ntheta;
+    dtheta = EQ->dtheta;
+    theta = EQ->theta;
+    frac_a = EQ->frac_a;
+    frac_b = EQ->frac_b;
+    ga = EQ->ga;
+    gb = EQ->gb;
+    gab = EQ->gab;
+    nabla_coef = EQ->nabla_coef;
+
+    der_a = carrDef(ntheta);
+    der_b = carrDef(ntheta);
+
+    Integ = rarrDef(ntheta);
+    Integ_kin = rarrDef(ntheta);
+    Integ_mu_a = rarrDef(ntheta);
+    Integ_mu_b = rarrDef(ntheta);
+    abs_square_a = rarrDef(ntheta);
+    abs_square_b = rarrDef(ntheta);
+    abs_square_der_a = rarrDef(ntheta);
+    abs_square_der_b = rarrDef(ntheta);
+
+    derivative_1dreflection(ntheta, state_a, dtheta, der_a, azi_a);
+    derivative_1dreflection(ntheta, state_b, dtheta, der_b, azi_b);
+    carrAbs2(ntheta, der_a, abs_square_der_a);
+    carrAbs2(ntheta, der_b, abs_square_der_b);
+
+    carrAbs2(ntheta, state_a, abs_square_a);
+    carrAbs2(ntheta, state_b, abs_square_b);
+
+    // Setup function to integrate
+    for (j = 1; j < ntheta - 1; j++)
+    {
+        sin_th = sin(theta[j]);
+        nabla_part_a = -nabla_coef * (
+                abs_square_der_a[j] +
+                azi_a * azi_a * abs_square_a[j] / sin_th / sin_th
+        );
+        nabla_part_b = -nabla_coef * (
+                abs_square_der_b[j] +
+                azi_b * azi_b * abs_square_b[j] / sin_th / sin_th
+        );
+        Integ_kin[j] = sin_th * (frac_a * nabla_part_a + frac_b * nabla_part_b);
+        Integ_mu_a[j] = sin_th * (
+                nabla_part_a
+                + ga * abs_square_a[j] * abs_square_a[j]
+                + sqrt(frac_b / frac_a) * gab * (abs_square_a[j]
+                * abs_square_b[j])
+        );
+        Integ_mu_b[j] = sin_th * (
+                nabla_part_b
+                + gb * abs_square_b[j] * abs_square_b[j]
+                + sqrt(frac_a / frac_b) * gab * (abs_square_a[j]
+                * abs_square_b[j])
+        );
+        Integ[j] = sin_th * (
+                frac_a * nabla_part_a
+                + frac_b * nabla_part_b
+                + 0.5 * frac_a * ga * abs_square_a[j] * abs_square_a[j]
+                + 0.5 * frac_b * gb * abs_square_b[j] * abs_square_b[j]
+                + sqrt(frac_a * frac_b) * gab * (abs_square_a[j]
+                * abs_square_b[j])
+        );
+    }
+    Integ[0] = 0.0;
+    Integ[ntheta - 1] = 0.0;
+    Integ_kin[0] = 0.0;
+    Integ_kin[ntheta - 1] = 0.0;
+    Integ_mu_a[0] = 0.0;
+    Integ_mu_a[ntheta - 1] = 0.0;
+    Integ_mu_b[0] = 0.0;
+    Integ_mu_b[ntheta - 1] = 0.0;
+
+    total_energy = Rsimps1D(ntheta, Integ, dtheta);
+    (* kin) = Rsimps1D(ntheta, Integ_kin, dtheta);
+    (* mu_a) = Rsimps1D(ntheta, Integ_mu_a, dtheta);
+    (* mu_b) = Rsimps1D(ntheta, Integ_mu_b, dtheta);
+
+    free(abs_square_der_a);
+    free(abs_square_der_b);
+    free(abs_square_a);
+    free(abs_square_b);
+    free(Integ_mu_a);
+    free(Integ_mu_b);
+    free(Integ_kin);
+    free(Integ);
+    free(der_a);
+    free(der_b);
+
+    return total_energy;
+}
+
+
+double theta_density_overlap(EqDataPkg EQ, Rarray density_a, Rarray density_b)
+{
+    int
+        i;
+    double
+        norm_a,
+        norm_b,
+        raw_overlap;
+    Rarray
+        integ_a,
+        integ_b,
+        integ_ab;
+
+    integ_ab = rarrDef(EQ->ntheta);
+    integ_a = rarrDef(EQ->ntheta);
+    integ_b = rarrDef(EQ->ntheta);
+
+    for (i = 0; i < EQ->ntheta; i++)
+    {
+        integ_ab[i] = sin(EQ->theta[i]) * density_a[i] * density_b[i];
+        integ_a[i] = sin(EQ->theta[i]) * density_a[i] * density_a[i];
+        integ_b[i] = sin(EQ->theta[i]) * density_b[i] * density_b[i];
+    }
+
+    raw_overlap = Rsimps1D(EQ->ntheta, integ_ab, EQ->dtheta);
+    norm_a = Rsimps1D(EQ->ntheta, integ_a, EQ->dtheta);
+    norm_b = Rsimps1D(EQ->ntheta, integ_b, EQ->dtheta);
+
+    free(integ_ab);
+    free(integ_a);
+    free(integ_b);
+    return raw_overlap * raw_overlap / norm_a / norm_b;
 }
 
 

@@ -268,6 +268,31 @@ void renormalize_spheric(EqDataPkg EQ, Carray S)
 }
 
 
+void renormalize_theta_sphere(EqDataPkg EQ, Carray S)
+{
+    int
+        i;
+    double
+        old_norm;
+    Rarray
+        abs_square_sin;
+
+    abs_square_sin = rarrDef(EQ->ntheta);
+
+    for (i = 0; i < EQ->ntheta; i++)
+    {
+        abs_square_sin[i] = sin(EQ->theta[i]) * (
+                creal(S[i]) * creal(S[i]) + cimag(S[i]) * cimag(S[i])
+        );
+    }
+
+    old_norm = Rsimps1D(EQ->ntheta, abs_square_sin, EQ->dtheta);
+
+    for (i = 0; i < EQ->ntheta; i++) S[i] = S[i] / sqrt(old_norm);
+    free(abs_square_sin);
+}
+
+
 void derivative_1dperiodic(int n, Carray f, double dx, Carray dfdx)
 {
 
@@ -287,6 +312,32 @@ void derivative_1dperiodic(int n, Carray f, double dx, Carray dfdx)
     dfdx[1]   = ( f[n-2] - f[3] + 8 * (f[2] - f[0]) )   * r;
     dfdx[n-2] = ( f[n-4] - f[1] + 8 * (f[0] - f[n-3]) ) * r;
     dfdx[n-1] = dfdx[0]; // assume last point as the boundary
+
+    for (i = 2; i < n - 2; i++)
+    {
+        dfdx[i] = ( f[i-2] - f[i+2] + 8 * (f[i+1] - f[i-1]) ) * r;
+    }
+
+}
+
+
+void derivative_1dreflection(int n, Carray f, double dx, Carray dfdx, int azi)
+{
+
+    int
+        i,
+        sign;
+    double
+        r;
+
+    sign = 1 - 2 * (azi % 2);
+
+    r = 1.0 / (12 * dx); // ratio for a fourth-order scheme
+
+    dfdx[0]   = ( sign * f[2] - f[2] + 8 * (f[1] - sign * f[1]) ) * r;
+    dfdx[1]   = ( sign * f[1] - f[3] + 8 * (f[2] - f[0]) ) * r;
+    dfdx[n-2] = ( f[n-4] - sign * f[n-2] + 8 * (f[n-1] - f[n-3]) ) * r;
+    dfdx[n-1] = ( f[n-3] - sign * f[n-3] + 8 * (sign * f[n-2] - f[n-2]) ) * r;
 
     for (i = 2; i < n - 2; i++)
     {
@@ -316,6 +367,49 @@ void twice_derivative_1dperiodic(int n, Carray f, double dx, Carray d2fdx)
     d2fdx[1] = r * (- f[3] + 16 * f[2] - 30 * f[1] + 16 * f[0] - f[l]);
     d2fdx[l] = r * (- f[1] + 16 * f[0] - 30 * f[l] + 16 * f[l - 1] - f[l - 2]);
     d2fdx[n - 1] = d2fdx[0];
+
+    for (i = 2; i < n - 2; i++)
+    {
+        d2fdx[i] = r * (
+                - f[i + 2] + 16 * f[i + 1] - 30 * f[i]
+                + 16 * f[i - 1] - f[i - 2]
+        );
+    }
+
+}
+
+
+void twice_derivative_1dreflection(
+        int n, Carray f, double dx, Carray d2fdx, int azi)
+{
+
+/** Compute second derivative of function `f` in `n` grid points
+    with spacing `dx`. Consider f[0] = f[n - 1] the boundary **/
+
+    int
+        i,
+        l,
+        sign;
+    double
+        r;
+
+    sign = 1 - 2 * (azi % 2);
+    r = 1.0 / (12 * dx * dx);
+
+    l = n - 1; // last index
+    d2fdx[0] = r * (
+            -f[2] + 16 * f[1] - 30 * f[0] + 16 * sign * f[1] - sign * f[2]
+    );
+    d2fdx[1] = r * (
+            -f[3] + 16 * f[2] - 30 * f[1] + 16 * f[0] - sign * f[1]
+    );
+    d2fdx[l] = r * (
+            -sign * f[l-2] + sign * 16 * f[l-1] -
+            30 * f[l] + 16 * f[l-1] - f[l-2]);
+    d2fdx[l - 1] = r * (
+            -sign * f[l-1] + 16 * f[l] - 30 * f[l-1]
+            + 16 * f[l-2] - f[l-3]
+    );
 
     for (i = 2; i < n - 2; i++)
     {

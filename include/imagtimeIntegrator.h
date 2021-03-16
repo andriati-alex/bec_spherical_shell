@@ -10,4 +10,6 @@ int splitstep_spherical_shell(EqDataPkg, Carray, Carray);
 
 int splitstep_spherical_shell_single(EqDataPkg, Carray);
 
+int splitstep_theta_sphere(EqDataPkg, Carray, Carray, int, int);
+
 #endif

@@ -263,6 +263,47 @@ void _propagate_linear(
 }
 
 
+
+void _propagate_linear_theta(
+        EqDataPkg EQ, Carray upper, Carray l_decomp, Carray u_decomp,
+        int azi, Carray psi_th)
+{
+    int
+        ntheta;
+
+    Carray
+        cn_psi_th,
+        aux_workspace;
+
+    ntheta = EQ->ntheta;
+
+    cn_psi_th = carrDef(ntheta);
+    aux_workspace = carrDef(ntheta);
+
+    // Solve for azimuthal number == 0
+    if (azi == 0)
+    {
+        _explicit_theta(EQ, azi, psi_th, cn_psi_th);
+        tridiag_lu(
+                ntheta, upper, l_decomp, u_decomp,
+                aux_workspace, cn_psi_th, psi_th
+        );
+    }
+    else
+    {
+        _explicit_theta(EQ, azi, psi_th, cn_psi_th);
+        tridiag_lu(
+                ntheta - 2, upper, l_decomp, u_decomp,
+                aux_workspace, &cn_psi_th[1], &psi_th[1]);
+        psi_th[0] = 0.0 + 0.0 * I;
+        psi_th[ntheta-1] = 0.0 + 0.0 * I;
+    }
+
+    free(cn_psi_th);
+    free(aux_workspace);
+}
+
+
 int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
 {
 
@@ -793,6 +834,336 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     cmatFree(nphi - 1, u_decomp);
 
     m = DftiFreeDescriptor(&desc);
+
+    return EQ->nt + 1;
+}
+
+
+
+int splitstep_theta_sphere(
+        EqDataPkg EQ, Carray Sa, Carray Sb, int azi_a, int azi_b)
+{
+
+    int
+        j,
+        k,
+        ntheta,
+        display_info_stride;
+    double
+        mu_a,
+        mu_b,
+        energy,
+        kin_energy,
+        sin_sq,
+        azi_sq,
+        dtheta,
+        nabla_coef,
+        omega,
+        frac_a,
+        frac_b,
+        ga,
+        gb,
+        gab,
+        Idt,
+        den_overlap;
+    double complex
+        dt;
+    Carray
+        inter_evol_op,
+        mid_a,
+        mid_b,
+        upper_a,
+        lower_a,
+        upper_b,
+        lower_b,
+        l_decomp_a,
+        u_decomp_a,
+        l_decomp_b,
+        u_decomp_b,
+        linear_part;
+    Rarray
+        theta,
+        abs_square_a,
+        abs_square_b,
+        inter_pot;
+
+    dt  = - I * EQ->dt;
+    Idt = - EQ->dt;
+
+    display_info_stride = (EQ->nt / 1000) + 1;
+
+    ntheta = EQ->ntheta;
+    dtheta = EQ->dtheta;
+    nabla_coef = EQ->nabla_coef;
+    omega = EQ->omega;
+    frac_a = EQ->frac_a;
+    frac_b = EQ->frac_b;
+    ga = EQ->ga;
+    gb = EQ->gb;
+    gab = EQ->gab;
+    theta = EQ->theta;
+
+    abs_square_a = rarrDef(ntheta);     // |Psi_a|^2
+    abs_square_b = rarrDef(ntheta);     // |Psi_b|^2
+    inter_pot = rarrDef(ntheta);        // interaction potential
+    inter_evol_op = carrDef(ntheta);    // exp[-i * dt/2 * inter_pot]
+    linear_part = carrDef(ntheta);      // enter linear solver
+
+    upper_a = carrDef(ntheta - 1);
+    lower_a = carrDef(ntheta - 1);
+    upper_b = carrDef(ntheta - 1);
+    lower_b = carrDef(ntheta - 1);
+
+    mid_a = carrDef(ntheta);
+    mid_b = carrDef(ntheta);
+
+    l_decomp_a = carrDef(ntheta);
+    u_decomp_a = carrDef(ntheta);
+    l_decomp_b = carrDef(ntheta);
+    u_decomp_b = carrDef(ntheta);
+
+    azi_sq = azi_a * azi_a;
+    if (azi_sq != 0)
+    {
+        for (j = 0; j < ntheta - 2; j++)
+        {
+            sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
+            mid_a[j] = (I + nabla_coef * dt *
+                    (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi_a
+            );
+        }
+    }
+    else
+    {
+        for (j = 0; j < ntheta; j++)
+        {
+            mid_a[j] = I + nabla_coef * dt / dtheta / dtheta;
+        }
+    }
+    azi_sq = azi_b * azi_b;
+    if (azi_sq != 0)
+    {
+        for (j = 0; j < ntheta - 2; j++)
+        {
+            sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
+            mid_b[j] = (I + nabla_coef * dt *
+                    (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi_b
+            );
+        }
+    }
+    else
+    {
+        for (j = 0; j < ntheta; j++)
+        {
+            mid_b[j] = I + nabla_coef * dt / dtheta / dtheta;
+        }
+    }
+
+    if (azi_a != 0)
+    {
+        for (j = 1; j < ntheta - 2; j++)
+        {
+            upper_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j + 1]) / sin(theta[j + 1]) / dtheta
+            );
+        }
+    }
+    else
+    {
+        for (j = 1; j < ntheta - 1; j++)
+        {
+            upper_a[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+        }
+        upper_a[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+        lower_a[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+    }
+
+    if (azi_b != 0)
+    {
+        for (j = 1; j < ntheta - 2; j++)
+        {
+            upper_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j + 1]) / sin(theta[j + 1]) / dtheta
+            );
+        }
+    }
+    else
+    {
+        for (j = 1; j < ntheta - 1; j++)
+        {
+            upper_b[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+        }
+        upper_b[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+        lower_b[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+    }
+
+    if (azi_a != 0)
+    {
+        lu_decomposition(
+                ntheta - 2, upper_a, lower_a, mid_a, l_decomp_a, u_decomp_a
+        );
+    }
+    else
+    {
+        lu_decomposition(
+                ntheta, upper_a, lower_a, mid_a, l_decomp_a, u_decomp_a
+        );
+    }
+    if (azi_b != 0)
+    {
+        lu_decomposition(
+                ntheta - 2, upper_b, lower_b, mid_b, l_decomp_b, u_decomp_b
+        );
+    }
+    else
+    {
+        lu_decomposition(
+                ntheta, upper_b, lower_b, mid_b, l_decomp_b, u_decomp_b
+        );
+    }
+
+    printf("\n\nProgrs  Energy       Kinect");
+    printf("       mu_a         mu_b         overlap");
+    sepline();
+    carrAbs2(ntheta, Sa, abs_square_a);
+    carrAbs2(ntheta, Sb, abs_square_b);
+    energy = functionals_theta(
+            EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
+    );
+    den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
+    printf("\nazi_a = %d | azi_b = %d\n", azi_a, azi_b);
+    printf("%5.1lf%%", 0.0);
+    printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
+            energy, kin_energy, mu_a, mu_b, den_overlap);
+
+    for (k = 0; k < EQ->nt; k++)
+    {
+        carrAbs2(ntheta, Sa, abs_square_a);
+        carrAbs2(ntheta, Sb, abs_square_b);
+
+        // A) interaction part half time step
+
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (ga * abs_square_a[j]
+                    + sqrt(frac_b / frac_a) * gab * abs_square_b[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, Sa, linear_part);
+
+        // A) linear part entire time step
+
+        _propagate_linear_theta(
+                EQ, upper_a, l_decomp_a, u_decomp_a, azi_a, linear_part
+        );
+
+        // A) transfer data
+        carrCopy(ntheta, linear_part, Sa);
+
+        // B) interaction part half time step
+
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (gb * abs_square_b[j]
+                    + sqrt(frac_a / frac_b) * gab * abs_square_a[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, Sb, linear_part);
+
+        // B) linear part entire time step
+
+        _propagate_linear_theta(
+                EQ, upper_b, l_decomp_b, u_decomp_b, azi_b, linear_part
+        );
+
+        // B) transfer data
+
+        carrCopy(ntheta, linear_part, Sb);
+
+        // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
+        // Note that the interaction potential will be updated
+
+        carrAbs2(ntheta, Sa, abs_square_a);
+        carrAbs2(ntheta, Sb, abs_square_b);
+
+        // species A - `linear_part` as workspace array
+
+        carrCopy(ntheta, Sa, linear_part);
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (ga * abs_square_a[j]
+                    + sqrt(frac_b / frac_a) * gab * abs_square_b[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, linear_part, Sa);
+
+        // species B - `linear_part` as workspace array
+
+        carrCopy(ntheta, Sb, linear_part);
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (gb * abs_square_b[j]
+                    + sqrt(frac_a / frac_b) * gab * abs_square_a[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, linear_part, Sb);
+
+        // Renormalize
+        renormalize_theta_sphere(EQ, Sa);
+        renormalize_theta_sphere(EQ, Sb);
+
+        if ( (k + 1) % (display_info_stride) == 0 )
+        {
+            carrAbs2(ntheta, Sa, abs_square_a);
+            carrAbs2(ntheta, Sb, abs_square_b);
+            energy = functionals_theta(
+                    EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
+            );
+            den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
+            printf("%5.1lf%%",(100.0 * k) / EQ->nt);
+            printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
+                    energy, kin_energy, mu_a, mu_b, den_overlap);
+        }
+
+    }
+
+    free(inter_evol_op);
+    free(linear_part);
+    free(abs_square_a);
+    free(abs_square_b);
+    free(upper_a);
+    free(lower_a);
+    free(upper_b);
+    free(lower_b);
+    free(inter_pot);
+    free(mid_a);
+    free(mid_b);
+    free(l_decomp_a);
+    free(u_decomp_a);
+    free(l_decomp_b);
+    free(u_decomp_b);
 
     return EQ->nt + 1;
 }
