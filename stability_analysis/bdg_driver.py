@@ -2,6 +2,7 @@ from math import pi, sqrt
 import numpy as np
 import scipy.sparse as sp
 import scipy.linalg as la
+from scipy.linalg import eig
 from scipy.integrate import simps
 
 
@@ -41,19 +42,21 @@ class BdGOperator:
             f[2:npts] - 2 * f[1 : npts - 1] + f[: npts - 2]
         ) / dtht ** 2
         twice_der[0] = (
-            f[1] - 2 * f[0] + (1 - 2 * (vort % 2)) * f[1]
+            f[1] - 2 * f[0] + (1 - 2 * (abs(vort) % 2)) * f[1]
         ) / dtht ** 2
         twice_der[npts - 1] = (
-            (1 - 2 * (vort % 2)) * f[npts - 2] - 2 * f[npts - 1] + f[npts - 2]
+            (1 - 2 * (abs(vort) % 2)) * f[npts - 2]
+            - 2 * f[npts - 1]
+            + f[npts - 2]
         ) / dtht ** 2
         single_der[1 : npts - 1] = (f[2:npts] - f[: npts - 2]) / (2 * dtht)
-        single_der[0] = (f[1] - (1 - 2 * (vort % 2)) * f[1]) / (2 * dtht)
+        single_der[0] = (f[1] - (1 - 2 * (abs(vort) % 2)) * f[1]) / (2 * dtht)
         single_der[npts - 1] = (
-            (1 - 2 * (vort % 2)) * f[npts - 2] - f[npts - 2]
+            (1 - 2 * (abs(vort) % 2)) * f[npts - 2] - f[npts - 2]
         ) / (2 * dtht)
         phi_der = np.zeros(npts)
         phi_der[1 : npts - 1] = (
-            vort ** 2 * f[1 : npts - 1] / sin_th[1 : npts - 1] ** 2
+            -(vort ** 2) * f[1 : npts - 1] / sin_th[1 : npts - 1] ** 2
         )
         integ = (
             nabl
@@ -64,29 +67,67 @@ class BdGOperator:
         )
         return simps(integ, dx=dtht)
 
-    def chem_a(self, ga, gab):
+    def chem_a(self, ga, gab, fa=None, fb=None):
+        fa = fa or self.con_func_a
+        fb = fb or self.con_func_b
         return self.__chem(
             self.vort_a,
-            self.con_func_a,
-            self.con_func_b,
+            fa,
+            fb,
             self.frac_a,
             self.frac_b,
             ga,
             gab,
         )
 
-    def chem_b(self, gb, gab):
+    def chem_b(self, gb, gab, fa=None, fb=None):
+        fa = fa or self.con_func_a
+        fb = fb or self.con_func_b
         return self.__chem(
             self.vort_b,
-            self.con_func_b,
-            self.con_func_a,
+            fb,
+            fa,
             self.frac_b,
             self.frac_a,
             gb,
             gab,
         )
 
-    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab):
+    def lowlying_eig(
+        self,
+        m,
+        mu_a,
+        mu_b,
+        ga,
+        gb,
+        gab,
+        fa=None,
+        fb=None,
+        neigs=80,
+        sigma=0.67 + 0.33j,
+    ):
+        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
+        eigvals, eigvecs = sp.linalg.eigs(mat, neigs, which="LM", sigma=sigma)
+        return np.sort(eigvals)[::-1]
+
+    def all_eig(
+        self,
+        m,
+        mu_a,
+        mu_b,
+        ga,
+        gb,
+        gab,
+        fa=None,
+        fb=None,
+    ):
+        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
+        eigvals, eigvecs = eig(mat.toarray())
+        return np.sort(eigvals)[::-1]
+
+    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa=None, fb=None):
+        fa = fa or self.con_func_a
+        fb = fb or self.con_func_b
         dtht = self.dtht
         npts = self.tht_pts
         nabl = self.nabla_factor
@@ -102,7 +143,7 @@ class BdGOperator:
         diag_main1 = np.zeros(npts)
         diag_main1[1 : npts - 1] = (
             nabl
-            * (-2.0 / dtht / dtht - (sa + m) ** 2 / sin_th[1 : npts - 1] ** 2)
+            * (-2.0 / dtht ** 2 - (sa + m) ** 2 / sin_th[1 : npts - 1] ** 2)
             + 2 * ga * fa[1 : npts - 1] ** 2
             + sqrt_ratio_a * gab * fb[1 : npts - 1] ** 2
             - mu_a
@@ -190,6 +231,7 @@ class BdGOperator:
         diag_main = np.concatenate(
             [diag_main1, diag_main2, diag_main3, diag_main4]
         )
+        # =====================================================================
 
         diag_upp1 = np.zeros(npts)
         diag_upp1[1 : npts - 2] = nabl * (
@@ -252,6 +294,7 @@ class BdGOperator:
             )
 
         diag_upp = np.concatenate([diag_upp1, diag_upp2, diag_upp3, diag_upp4])
+        # =====================================================================
 
         diag_low1 = np.zeros(npts)
         diag_low1[1 : npts - 2] = nabl * (
@@ -384,6 +427,7 @@ class BdGOperator:
         else:
             d2 = sign * gab * sqrt_ratio_b * fa * fb
         block_diag_low2 = np.concatenate([d1, d2])
+
         block_diag_low3 = np.zeros(npts)
         if sa + m == 0:
             block_diag_low3[1 : npts - 1] = sign * (
@@ -732,385 +776,4 @@ class BdGOperator:
             (val, col, row),
             shape=(row.size - 1, row.size - 1),
             dtype=np.complex128,
-        )
-
-    def sparse_matrix2(self, m, mu_a, mu_b, ga, gb, gab):
-        dtht = self.dtht
-        nabl = self.nabla_factor
-        sin_th = np.sin(self.tht)
-        cos_th = np.cos(self.tht)
-        sa, sb = self.vort_a, self.vort_b
-        fa = self.con_func_a
-        fb = self.con_func_b
-        sign = -1
-        block_stride = self.tht_pts
-        val = np.empty(4 * 6 * block_stride, dtype=np.float64)
-        col = np.empty(val.size, dtype=np.int32)
-        row = np.empty(4 * block_stride + 1, dtype=np.int32)
-        row[0] = 0
-        k = 0
-        sqrt_ratio = sqrt(self.frac_b / self.frac_a)
-        # block 1 ============================================================
-        i = 0
-        if sa + m != 0:
-            start_col = 1
-        else:
-            start_col = 0
-            # block diagonal -------------------------------------------------
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * ga * fa[i] ** 2
-                + sqrt_ratio * gab * fb[i] ** 2
-                - mu_a
-            )
-            col[k] = i
-            k = k + 1
-            val[k] = 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i + 1
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = ga * fa[i] ** 2
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-        row[i + 1] = k
-        for i in range(1, self.tht_pts - 1):
-            # Block diagonal setup -------------------------------------------
-            if i - start_col > 0:
-                val[k] = nabl * (
-                    1.0 / dtht / dtht - 0.5 * cos_th[i] / sin_th[i] / dtht
-                )
-                col[k] = i - 1
-                k = k + 1
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht - (sa + m) ** 2 / sin_th[i] ** 2)
-                + 2 * ga * fa[i] ** 2
-                + sqrt_ratio * gab * fb[i] ** 2
-                - mu_a
-            )
-            col[k] = i
-            k = k + 1
-            if i + start_col < block_stride - 1:
-                val[k] = nabl * (
-                    1.0 / dtht / dtht + 0.5 * cos_th[i] / sin_th[i] / dtht
-                )
-                col[k] = i + 1
-                k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = ga * fa[i] ** 2
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1] = k
-        i = self.tht_pts - 1
-        if sa + m != 0:
-            row[i + 1] = k
-        else:
-            # block diagonal -------------------------------------------------
-            val[k] = 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i - 1
-            k = k + 1
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * ga * fa[i] ** 2
-                + sqrt_ratio * gab * fb[i] ** 2
-                - mu_a
-            )
-            col[k] = i
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = ga * fa[i] ** 2
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1] = k
-        # block 2 ============================================================
-        i = 0
-        if sa - m != 0:
-            start_col = 1
-        else:
-            val[k] = sign * ga * fa[i] ** 2
-            col[k] = i
-            k = k + 1
-            # block diagonal -------------------------------------------------
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * ga * abs(fa[i]) ** 2
-                + sqrt_ratio * gab * abs(fb[i]) ** 2
-                - mu_a
-            )
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = 2 * sign * nabl * (1.0 / dtht / dtht)
-            col[k] = i + 1 + block_stride
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            start_col = 0
-        row[i + 1 + block_stride] = k
-        for i in range(1, self.tht_pts - 1):
-            val[k] = sign * ga * fa[i] ** 2
-            col[k] = i
-            k = k + 1
-            # block diagonal setup -------------------------------------------
-            if i - start_col > 0:
-                val[k] = sign * (
-                    nabl
-                    * (1.0 / dtht / dtht - 0.5 * cos_th[i] / sin_th[i] / dtht)
-                )
-                col[k] = i - 1 + block_stride
-                k = k + 1
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht - (sa - m) ** 2 / sin_th[i] ** 2)
-                + 2 * ga * fa[i] ** 2
-                + sqrt_ratio * gab * fb[i] ** 2
-                - mu_a
-            )
-            col[k] = i + block_stride
-            k = k + 1
-            if i + start_col < block_stride - 1:
-                val[k] = sign * (
-                    nabl
-                    * (1.0 / dtht / dtht + 0.5 * cos_th[i] / sin_th[i] / dtht)
-                )
-                col[k] = i + 1 + block_stride
-                k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1 + block_stride] = k
-        i = block_stride - 1
-        if sa - m != 0:
-            row[i + 1 + block_stride] = k
-        else:
-            val[k] = sign * ga * fa[i] ** 2
-            col[k] = i
-            k = k + 1
-            # block diagonal -------------------------------------------------
-            val[k] = 2 * sign * nabl * (1.0 / dtht / dtht)
-            col[k] = i - 1 + block_stride
-            k = k + 1
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * ga * fa[i] ** 2
-                + sqrt_ratio * gab * fb[i] ** 2
-                - mu_a
-            )
-            col[k] = i + block_stride
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1 + block_stride] = k
-        # block 3 ============================================================
-        sqrt_ratio = sqrt(self.frac_a / self.frac_b)
-        i = 0
-        if sb + m != 0:
-            start_col = 1
-        else:
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            # block diagonal setup -------------------------------------------
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * gb * fb[i] ** 2
-                + sqrt_ratio * gab * fa[i] ** 2
-                - mu_b
-            )
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            val[k] = 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i + 1 + 2 * block_stride
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = gb * fb[i] ** 2
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            start_col = 0
-        row[i + 1 + 2 * block_stride] = k
-        for i in range(1, self.tht_pts - 1):
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            # block diagonal setup -------------------------------------------
-            if i - start_col > 0:
-                val[k] = nabl * (
-                    1.0 / dtht / dtht - 0.5 * cos_th[i] / sin_th[i] / dtht
-                )
-                col[k] = i - 1 + 2 * block_stride
-                k = k + 1
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht - (sb + m) ** 2 / sin_th[i] ** 2)
-                + 2 * gb * abs(fb[i]) ** 2
-                + sqrt_ratio * gab * abs(fa[i]) ** 2
-                - mu_b
-            )
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            if i + start_col < block_stride - 1:
-                val[k] = nabl * (
-                    1.0 / dtht / dtht + 0.5 * cos_th[i] / sin_th[i] / dtht
-                )
-                col[k] = i + 1 + 2 * block_stride
-                k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = gb * fb[i] ** 2
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1 + 2 * block_stride] = k
-        i = block_stride - 1
-        if sb + m != 0:
-            row[i + 1 + 2 * block_stride] = k
-        else:
-            val[k] = sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            # block diagonal setup -------------------------------------------
-            val[k] = 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i - 1 + 2 * block_stride
-            k = k + 1
-            val[k] = (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * gb * abs(fb[i]) ** 2
-                + sqrt_ratio * gab * abs(fa[i]) ** 2
-                - mu_b
-            )
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            # finish block diagonal setup ------------------------------------
-            val[k] = gb * fb[i] ** 2
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1 + 2 * block_stride] = k
-        # block 4 ============================================================
-        i = 0
-        if sb - m != 0:
-            start_col = 0
-        else:
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sign * gb * fb[i] ** 2
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            # block diagonal part -------------------------------------------
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * gb * abs(fb[i]) ** 2
-                + sqrt_ratio * gab * abs(fa[i]) ** 2
-                - mu_b
-            )
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            val[k] = sign * 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i + 1 + 3 * block_stride
-            k = k + 1
-            start_col = 1
-        row[i + 1 + 3 * block_stride] = k
-        for i in range(1, self.tht_pts - 1):
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sign * gb * fb[i] ** 2
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            # block diagonal part -------------------------------------------
-            if i - start_col > 0:
-                val[k] = sign * (
-                    nabl
-                    * (1.0 / dtht / dtht - 0.5 * cos_th[i] / sin_th[i] / dtht)
-                )
-                col[k] = i - 1 + 3 * block_stride
-                k = k + 1
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht - (sb - m) ** 2 / sin_th[i] ** 2)
-                + 2 * gb * fb[i] ** 2
-                + sqrt_ratio * gab * fa[i] ** 2
-                - mu_b
-            )
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            if i + start_col < block_stride - 1:
-                val[k] = sign * (
-                    nabl
-                    * (1.0 / dtht / dtht + 0.5 * cos_th[i] / sin_th[i] / dtht)
-                )
-                col[k] = i + 1 + 3 * block_stride
-                k = k + 1
-            # finish block diagonal setup ------------------------------------
-            row[i + 1 + 3 * block_stride] = k
-        i = block_stride - 1
-        if sb - m != 0:
-            row[i + 1 + 3 * block_stride] = k
-        else:
-            val[k] = sign * sqrt_ratio * gab * fb[i] * fa[i]
-            col[k] = i
-            k = k + 1
-            val[k] = sign * sqrt_ratio * gab * fa[i] * fb[i]
-            col[k] = i + block_stride
-            k = k + 1
-            val[k] = sign * gb * fb[i] ** 2
-            col[k] = i + 2 * block_stride
-            k = k + 1
-            # block diagonal part -------------------------------------------
-            val[k] = sign * 2 * nabl * (1.0 / dtht / dtht)
-            col[k] = i - 1 + 3 * block_stride
-            k = k + 1
-            val[k] = sign * (
-                nabl * (-2.0 / dtht / dtht)
-                + 2 * gb * fb[i] ** 2
-                + sqrt_ratio * gab * fa[i] ** 2
-                - mu_b
-            )
-            col[k] = i + 3 * block_stride
-            k = k + 1
-            row[i + 1 + 3 * block_stride] = k
-        return sp.csr_matrix(
-            (val, col, row),
-            shape=(4 * block_stride, 4 * block_stride),
-            dtype=np.float64,
         )

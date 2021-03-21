@@ -330,7 +330,7 @@ void derivative_1dreflection(int n, Carray f, double dx, Carray dfdx, int azi)
     double
         r;
 
-    sign = 1 - 2 * (azi % 2);
+    sign = 1 - 2 * (abs(azi) % 2);
 
     r = 1.0 / (12 * dx); // ratio for a fourth-order scheme
 
@@ -393,7 +393,7 @@ void twice_derivative_1dreflection(
     double
         r;
 
-    sign = 1 - 2 * (azi % 2);
+    sign = 1 - 2 * (abs(azi) % 2);
     r = 1.0 / (12 * dx * dx);
 
     l = n - 1; // last index

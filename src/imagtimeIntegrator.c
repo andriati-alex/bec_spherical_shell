@@ -34,7 +34,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
         azi_num_sq;
     Rarray
         theta;
-    complex
+    double complex
         idt,
         second_der,
         first_der;
@@ -854,6 +854,9 @@ int splitstep_theta_sphere(
         mu_b,
         energy,
         kin_energy,
+        prev_mu_a,
+        prev_mu_b,
+        prev_e,
         sin_sq,
         azi_sq,
         dtheta,
@@ -1053,6 +1056,9 @@ int splitstep_theta_sphere(
     printf("%5.1lf%%", 0.0);
     printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
             energy, kin_energy, mu_a, mu_b, den_overlap);
+    prev_mu_a = mu_a;
+    prev_mu_b = mu_b;
+    prev_e = energy;
 
     for (k = 0; k < EQ->nt; k++)
     {
@@ -1145,6 +1151,20 @@ int splitstep_theta_sphere(
             printf("%5.1lf%%",(100.0 * k) / EQ->nt);
             printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
                     energy, kin_energy, mu_a, mu_b, den_overlap);
+            if  (
+                    (
+                    fabs(energy - prev_e)
+                    + fabs(mu_a - prev_mu_a)
+                    + fabs(mu_b - prev_mu_b)
+                    ) / fabs(energy) < 1E-9
+                )
+            {
+                printf("\nAchieved enough accuracy\n");
+                break;
+            }
+            prev_e = energy;
+            prev_mu_a = mu_a;
+            prev_mu_b = mu_b;
         }
 
     }
