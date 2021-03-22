@@ -126,8 +126,10 @@ class BdGOperator:
         return np.sort(eigvals)[::-1]
 
     def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa=None, fb=None):
-        fa = fa or self.con_func_a
-        fb = fb or self.con_func_b
+        if isinstance(fa, type(None)):
+            fa = self.con_func_a
+        if isinstance(fb, type(None)):
+            fb = self.con_func_b
         dtht = self.dtht
         npts = self.tht_pts
         nabl = self.nabla_factor
