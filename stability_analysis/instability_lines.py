@@ -12,18 +12,16 @@ def script_run(prefix, m_vals, n_eigs):
     tht_pts = int(eq_data[0, 0])
     frac_a = eq_data[0, 5]
     frac_b = eq_data[0, 6]
-    vort_a = eq_data[0, 10]
-    vort_b = eq_data[0, 11]
+    vort_a = int(eq_data[0, 10])
+    vort_b = int(eq_data[0, 11])
     ga_sweep = eq_data[:, 7] / (2 * pi)
     gb_sweep = eq_data[:, 8] / (2 * pi)
     gab_sweep = eq_data[:, 9] / (2 * pi)
     obs_data = np.loadtxt(prefix + "_2species_obs" + suffix)
     mu_a_sweep = obs_data[:, 2]
     mu_b_sweep = obs_data[:, 3]
-    fallback_a = np.sqrt(0.5) * np.ones(tht_pts)
-    fallback_b = np.sqrt(0.5) * np.ones(tht_pts)
     bdg = bdg_driver.BdGOperator(
-        fallback_a, fallback_b, vort_a, vort_b, frac_a, frac_b
+        tht_pts, vort_a, vort_b, frac_a, frac_b
     )
     params_pack = zip(mu_a_sweep, mu_b_sweep, ga_sweep, gb_sweep, gab_sweep)
     out_file = open(prefix + "_stability.dat", "w")
@@ -45,6 +43,9 @@ def script_run(prefix, m_vals, n_eigs):
         sb = (
             raw_sb * np.exp(-1.0j * np.arctan2(raw_sb.imag, raw_sb.real))
         ).real
+        mu_a = bdg.chem_a(ga, gab, sa, sb)
+        mu_b = bdg.chem_b(gb, gab, sa, sb)
+        print("params {} {} {} {} {}".format(mu_a, mu_b, ga, gb, gab))
         for m in m_vals:
             eigs = bdg.lowlying_eig(m, mu_a, mu_b, ga, gb, gab, sa, sb)
             imag_eigs = np.sort(eigs.imag)[::-1]

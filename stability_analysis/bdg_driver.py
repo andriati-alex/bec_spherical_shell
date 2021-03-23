@@ -9,24 +9,20 @@ from scipy.integrate import simps
 class BdGOperator:
     def __init__(
         self,
-        con_func_a,
-        con_func_b,
+        tht_pts,
         vort_a,
         vort_b,
         frac_a,
         frac_b,
     ):
-        self.tht_pts = con_func_a.size
+        self.tht_pts = tht_pts
         self.dtht = pi / (self.tht_pts - 1)
         self.tht = np.linspace(0, pi, self.tht_pts)
-        self.shape = (4 * (self.tht_pts - 2), 4 * (self.tht_pts - 2))
         self.vort_a = vort_a
         self.vort_b = vort_b
         self.nabla_factor = -0.5
         self.frac_a = frac_a
         self.frac_b = frac_b
-        self.con_func_a = np.sqrt(abs(con_func_a) ** 2)
-        self.con_func_b = np.sqrt(abs(con_func_b) ** 2)
 
     def __chem(self, vort, f, f_ext, frac, frac_ext, g_self, g_inter):
         npts = self.tht_pts
@@ -67,9 +63,7 @@ class BdGOperator:
         )
         return simps(integ, dx=dtht)
 
-    def chem_a(self, ga, gab, fa=None, fb=None):
-        fa = fa or self.con_func_a
-        fb = fb or self.con_func_b
+    def chem_a(self, ga, gab, fa, fb):
         return self.__chem(
             self.vort_a,
             fa,
@@ -80,9 +74,7 @@ class BdGOperator:
             gab,
         )
 
-    def chem_b(self, gb, gab, fa=None, fb=None):
-        fa = fa or self.con_func_a
-        fb = fb or self.con_func_b
+    def chem_b(self, gb, gab, fa, fb):
         return self.__chem(
             self.vort_b,
             fb,
@@ -101,10 +93,10 @@ class BdGOperator:
         ga,
         gb,
         gab,
-        fa=None,
-        fb=None,
+        fa,
+        fb,
         neigs=80,
-        sigma=0.67 + 0.33j,
+        sigma=1.414213562 + 0.31415926j,
     ):
         mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
         eigvals, eigvecs = sp.linalg.eigs(mat, neigs, which="LM", sigma=sigma)
@@ -118,26 +110,20 @@ class BdGOperator:
         ga,
         gb,
         gab,
-        fa=None,
-        fb=None,
+        fa,
+        fb,
     ):
         mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
         eigvals, eigvecs = eig(mat.toarray())
         return np.sort(eigvals)[::-1]
 
-    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa=None, fb=None):
-        if isinstance(fa, type(None)):
-            fa = self.con_func_a
-        if isinstance(fb, type(None)):
-            fb = self.con_func_b
+    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa, fb):
         dtht = self.dtht
         npts = self.tht_pts
         nabl = self.nabla_factor
         sin_th = np.sin(self.tht)
         cos_th = np.cos(self.tht)
         sa, sb = self.vort_a, self.vort_b
-        fa = self.con_func_a
-        fb = self.con_func_b
         sqrt_ratio_a = sqrt(self.frac_b / self.frac_a)
         sqrt_ratio_b = sqrt(self.frac_a / self.frac_b)
         sign = -1
@@ -467,15 +453,13 @@ class BdGOperator:
             shape=(4 * npts, 4 * npts),
         )
 
-    def sparse_diag(self, m, mu_a, mu_b, ga, gb, gab):
+    def sparse_diag(self, m, mu_a, mu_b, ga, gb, gab, fa, fb):
         dtht = self.dtht
         npts = self.tht_pts
         nabl = self.nabla_factor
         sin_th = np.sin(self.tht)
         cos_th = np.cos(self.tht)
         sa, sb = self.vort_a, self.vort_b
-        fa = self.con_func_a
-        fb = self.con_func_b
         sqrt_ratio_a = sqrt(self.frac_b / self.frac_a)
         sqrt_ratio_b = sqrt(self.frac_a / self.frac_b)
         sign = -1
@@ -613,14 +597,12 @@ class BdGOperator:
             shape=(4 * (npts - 2), 4 * (npts - 2)),
         )
 
-    def sparse_matrix(self, m, mu_a, mu_b, ga, gb, gab):
+    def sparse_matrix(self, m, mu_a, mu_b, ga, gb, gab, fa, fb):
         dtht = self.dtht
         nabl = self.nabla_factor
         sin_th = np.sin(self.tht)
         cos_th = np.cos(self.tht)
         sa, sb = self.vort_a, self.vort_b
-        fa = self.con_func_a
-        fb = self.con_func_b
         sign = -1
         block_stride = self.tht_pts - 2
         val = np.empty(4 * (6 * block_stride - 2), dtype=np.complex128)
