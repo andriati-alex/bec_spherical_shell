@@ -6,6 +6,10 @@
 #include "observables.h"
 #include "inout.h"
 
+void _get_psi_theta(int, int, int, Carray, Carray);
+
+void _set_psi_theta(int, int, int, Carray, Carray);
+
 int splitstep_spherical_shell(EqDataPkg, Carray, Carray);
 
 int splitstep_spherical_shell_single(EqDataPkg, Carray);

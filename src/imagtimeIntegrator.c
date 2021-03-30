@@ -96,7 +96,7 @@ void _explicit_theta(EqDataPkg EQ, double azi_num, Carray psi, Carray cn_psi)
     }
     else
     {
-        
+
         // same as before but with `psi` == 0 at the boundaries
         i = 1;
         sin_th = sin(theta[i]);
@@ -552,6 +552,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
         grid_points,
         display_info_stride;
     double
+        old_mu_a,
+        old_mu_b,
         lza,
         lzb,
         mu_a,
@@ -720,6 +722,8 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
     printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
             energy, kin_energy, mu_a, mu_b, den_overlap);
     printf("  %11.8lf  %11.8lf   %11.8lf\n", lza, lzb, residue);
+    old_mu_a = mu_a;
+    old_mu_b = mu_b;
 
     // Start time evolution
     for (k = 0; k < EQ->nt; k++)
@@ -815,6 +819,9 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
                     energy, kin_energy, mu_a, mu_b, den_overlap);
             printf("  %11.8lf  %11.8lf   %11.8lf\n", lza, lzb, residue);
+            if (fabs(mu_a - old_mu_a) + fabs(mu_b - old_mu_b) < 5E-9) break;
+            old_mu_a = mu_a;
+            old_mu_b = mu_b;
         }
 
     }

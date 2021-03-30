@@ -12,6 +12,7 @@ obj = memoryHandling.o 	   \
 	  observables.o        \
 	  inout.o              \
 	  imagtimeIntegrator.o \
+	  realtimeIntegrator.o \
 	  newtonCG.o
 
 
@@ -26,6 +27,10 @@ obj = memoryHandling.o 	   \
 
 time_evolution : libgp.a exe/time_evolution.c
 	icc -o ./bin/time_evolution exe/time_evolution.c -lm -mkl -qopenmp \
+		-L./lib -I./include -lgp -O3
+
+dynamics : libgp.a exe/dynamics.c
+	icc -o ./bin/dynamics exe/dynamics.c -lm -mkl -qopenmp \
 		-L./lib -I./include -lgp -O3
 
 theta_time_evolution : libgp.a exe/theta_time_evolution.c
@@ -77,6 +82,9 @@ newtonCG.o : src/newtonCG.c
 
 imagtimeIntegrator.o : src/imagtimeIntegrator.c
 	icc -c -O3 -qopenmp -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -I./include src/imagtimeIntegrator.c
+
+realtimeIntegrator.o : src/realtimeIntegrator.c
+	icc -c -O3 -qopenmp -lmkl_intel_ilp64 -lmkl_gnu_thread -lmkl_core -I./include src/realtimeIntegrator.c
 
 clean :
 	-rm build/*.o
