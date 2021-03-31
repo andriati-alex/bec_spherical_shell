@@ -204,9 +204,14 @@ void _propagate_linear_dyn(
 }
 
 
-int real_time_evolution(EqDataPkg EQ, Carray Sa, Carray Sb)
+int real_time_evolution(
+        EqDataPkg EQ, Carray Sa, Carray Sb, char prefix [], int n_rec)
 {
 
+    char
+        fname_a[100],
+        fname_b[100],
+        fname_obs[100];
     int
         m,
         l,
@@ -257,16 +262,48 @@ int real_time_evolution(EqDataPkg EQ, Carray Sa, Carray Sb)
         abs_square_a,
         abs_square_b,
         inter_pot;
+    FILE
+        * file_ptr_a,
+        * file_ptr_b,
+        * file_obs;
 
     dt = EQ->dt;
     Idt = - I * dt;
+    nphi = EQ->nphi;
+    ntheta = EQ->ntheta;
+    grid_points = nphi * ntheta;
+
+    strcpy(fname_a, "output/");
+    strcat(fname_a, prefix);
+    strcat(fname_a, "_speciesA_realtime.dat");
+    file_ptr_a = fopen(fname_a, "w");
+    if (file_ptr_a == NULL)
+    {
+        printf("\n\nImpossible to open file %s\n\n", fname_a);
+        exit(EXIT_FAILURE);
+    }
+    carr_inline(file_ptr_a, grid_points, Sa);
+    fclose(file_ptr_a);
+
+    strcpy(fname_b, "output/");
+    strcat(fname_b, prefix);
+    strcat(fname_b, "_speciesB_realtime.dat");
+    file_ptr_b = fopen(fname_b, "w");
+    if (file_ptr_b == NULL)
+    {
+        printf("\n\nImpossible to open file %s\n\n", fname_b);
+        exit(EXIT_FAILURE);
+    }
+    carr_inline(file_ptr_b, grid_points, Sb);
+    fclose(file_ptr_b);
+
+    strcpy(fname_obs, "output/");
+    strcat(fname_obs, prefix);
+    strcat(fname_obs, "_obs_realtime.dat");
 
     if (EQ->nt > 1000) display_info_stride = (EQ->nt / 1000);
     else               display_info_stride = 1;
 
-    nphi = EQ->nphi;
-    ntheta = EQ->ntheta;
-    grid_points = nphi * ntheta;
     dphi = EQ->dphi;
     dtheta = EQ->dtheta;
     nabla_coef = EQ->nabla_coef;
@@ -387,6 +424,14 @@ int real_time_evolution(EqDataPkg EQ, Carray Sa, Carray Sb)
     printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
             energy, kin_energy, norm_a, norm_b, den_overlap);
     printf("  %11.8lf  %11.8lf\n", lza, lzb);
+    file_obs = fopen(fname_obs, "w");
+    if (file_obs == NULL)
+    {
+        printf("\n\nImpossible to open file %s\n\n", fname_obs);
+        exit(EXIT_FAILURE);
+    }
+    fprintf(file_obs, "%.6lf %.6lf %.6lf\n", 0.0, energy, den_overlap);
+    fclose(file_obs);
 
     // Start time evolution
     for (k = 0; k < EQ->nt; k++)
@@ -479,6 +524,41 @@ int real_time_evolution(EqDataPkg EQ, Carray Sa, Carray Sb)
             printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
                     energy, kin_energy, norm_a, norm_b, den_overlap);
             printf("  %11.8lf  %11.8lf\n", lza, lzb);
+        }
+
+        if ((k + 1) % n_rec == 0)
+        {
+            carrAbs2(grid_points, Sa, abs_square_a);
+            carrAbs2(grid_points, Sb, abs_square_b);
+            energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
+            den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
+            file_obs = fopen(fname_obs, "a");
+            if (file_obs == NULL)
+            {
+                printf("\n\nImpossible to open file %s\n\n", fname_obs);
+                exit(EXIT_FAILURE);
+            }
+            fprintf(file_obs,
+                    "%.6lf %.6lf %.6lf\n",
+                    (k + 1) * dt, energy, den_overlap
+            );
+            fclose(file_obs);
+            file_ptr_a = fopen(fname_a, "a");
+            if (file_ptr_a == NULL)
+            {
+                printf("\n\nImpossible to open file %s\n\n", fname_a);
+                exit(EXIT_FAILURE);
+            }
+            carr_inline(file_ptr_a, grid_points, Sa);
+            fclose(file_ptr_a);
+            file_ptr_b = fopen(fname_b, "a");
+            if (file_ptr_b == NULL)
+            {
+                printf("\n\nImpossible to open file %s\n\n", fname_b);
+                exit(EXIT_FAILURE);
+            }
+            carr_inline(file_ptr_b, grid_points, Sb);
+            fclose(file_ptr_b);
         }
 
     }

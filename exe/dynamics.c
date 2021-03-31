@@ -264,7 +264,8 @@ int main(int argc, char * argv[])
 
     int
         N,
-        i;
+        i,
+        n_rec;
     double
         start,      // start trigger to measure time
         time_used;  // Time used in calling evolution routine
@@ -301,6 +302,10 @@ int main(int argc, char * argv[])
                 break;
             case 2:
                 fscanf(txt_file_ptr, "%s", outfname);
+                i = i + 1;
+                break;
+            case 3:
+                fscanf(txt_file_ptr, "%d", &n_rec);
                 break;
         }
         ReachNewLine(txt_file_ptr);
@@ -308,7 +313,7 @@ int main(int argc, char * argv[])
 
     fclose(txt_file_ptr);
 
-    if (i != 2)
+    if (i != 3)
     {
         printf("\nWrong number of parameters from dynamics-job.conf file\n\n");
         exit(EXIT_FAILURE);
@@ -369,7 +374,7 @@ int main(int argc, char * argv[])
 
     start = omp_get_wtime();
 
-    N = real_time_evolution(EQ, Sa, Sb);
+    N = real_time_evolution(EQ, Sa, Sb, outfname, n_rec);
 
     time_used = (double) (omp_get_wtime() - start);
     printf("\n\nTime elapsed in time evolution of %d steps", N);

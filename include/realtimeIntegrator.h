@@ -3,6 +3,6 @@
 
 #include "imagtimeIntegrator.h"
 
-int real_time_evolution(EqDataPkg, Carray, Carray);
+int real_time_evolution(EqDataPkg, Carray, Carray, char [], int);
 
 #endif
