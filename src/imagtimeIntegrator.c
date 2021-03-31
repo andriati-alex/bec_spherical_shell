@@ -819,7 +819,7 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %8.6lf",
                     energy, kin_energy, mu_a, mu_b, den_overlap);
             printf("  %11.8lf  %11.8lf   %11.8lf\n", lza, lzb, residue);
-            if (fabs(mu_a - old_mu_a) + fabs(mu_b - old_mu_b) < 5E-9) break;
+            if (fabs(mu_a - old_mu_a) + fabs(mu_b - old_mu_b) < 1E-10) break;
             old_mu_a = mu_a;
             old_mu_b = mu_b;
         }
@@ -1163,7 +1163,7 @@ int splitstep_theta_sphere(
                     fabs(energy - prev_e)
                     + fabs(mu_a - prev_mu_a)
                     + fabs(mu_b - prev_mu_b)
-                    ) / fabs(energy) < 1E-9
+                    ) / fabs(energy) < 1E-10
                 )
             {
                 printf("\nAchieved enough accuracy\n");
