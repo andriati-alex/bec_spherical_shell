@@ -265,13 +265,24 @@ int real_time_evolution(
     FILE
         * file_ptr_a,
         * file_ptr_b,
-        * file_obs;
+        * file_obs,
+        * file_overlap;
 
     dt = EQ->dt;
     Idt = - I * dt;
     nphi = EQ->nphi;
     ntheta = EQ->ntheta;
     grid_points = nphi * ntheta;
+
+    strcpy(fname_a, "output/");
+    strcat(fname_a, prefix);
+    strcat(fname_a, "_overlap_realtime.dat");
+    file_overlap = fopen(fname_a, "w");
+    if (file_overlap == NULL)
+    {
+        printf("\n\nImpossible to open file %s\n\n", fname_a);
+        exit(EXIT_FAILURE);
+    }
 
     strcpy(fname_a, "output/");
     strcat(fname_a, prefix);
@@ -432,6 +443,7 @@ int real_time_evolution(
     }
     fprintf(file_obs, "%.6lf %.6lf %.6lf\n", 0.0, energy, den_overlap);
     fclose(file_obs);
+    fprintf(file_overlap, "%.6lf %.6lf\n", 0.0, den_overlap);
 
     // Start time evolution
     for (k = 0; k < EQ->nt; k++)
@@ -561,6 +573,11 @@ int real_time_evolution(
             fclose(file_ptr_b);
         }
 
+        carrAbs2(grid_points, Sa, abs_square_a);
+        carrAbs2(grid_points, Sb, abs_square_b);
+        den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
+        fprintf(file_overlap, "%.6lf %.6lf\n", (k + 1) * dt, den_overlap);
+
     }
 
     free(inter_evol_op);
@@ -576,6 +593,7 @@ int real_time_evolution(
     cmatFree(nphi - 1, mid);
     cmatFree(nphi - 1, l_decomp);
     cmatFree(nphi - 1, u_decomp);
+    fclose(file_overlap);
 
     m = DftiFreeDescriptor(&desc);
 
