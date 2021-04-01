@@ -2,7 +2,7 @@ import os
 import argparse
 import bdg_driver
 import numpy as np
-from math import pi, sqrt
+from math import pi
 
 
 def script_run(prefix, m_vals, n_eigs):
@@ -20,9 +20,7 @@ def script_run(prefix, m_vals, n_eigs):
     obs_data = np.loadtxt(prefix + "_2species_obs" + suffix)
     mu_a_sweep = obs_data[:, 2]
     mu_b_sweep = obs_data[:, 3]
-    bdg = bdg_driver.BdGOperator(
-        tht_pts, vort_a, vort_b, frac_a, frac_b
-    )
+    bdg = bdg_driver.BdGOperator(tht_pts, vort_a, vort_b, frac_a, frac_b)
     params_pack = zip(mu_a_sweep, mu_b_sweep, ga_sweep, gb_sweep, gab_sweep)
     out_file = open(prefix + "_stability.dat", "w")
     out_file.write("# {} largest imag part for each m\n".format(n_eigs))
@@ -43,8 +41,6 @@ def script_run(prefix, m_vals, n_eigs):
         sb = (
             raw_sb * np.exp(-1.0j * np.arctan2(raw_sb.imag, raw_sb.real))
         ).real
-        mu_a = bdg.chem_a(ga, gab, sa, sb)
-        mu_b = bdg.chem_b(gb, gab, sa, sb)
         print("params {} {} {} {} {}".format(mu_a, mu_b, ga, gb, gab))
         for m in m_vals:
             eigs = bdg.lowlying_eig(m, mu_a, mu_b, ga, gb, gab, sa, sb)

@@ -1,7 +1,6 @@
 from math import pi, sqrt
 import numpy as np
 import scipy.sparse as sp
-import scipy.linalg as la
 from scipy.linalg import eig
 from scipy.integrate import simps
 
