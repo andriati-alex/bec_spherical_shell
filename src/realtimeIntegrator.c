@@ -276,7 +276,7 @@ int real_time_evolution(
 
     strcpy(fname_a, "output/");
     strcat(fname_a, prefix);
-    strcat(fname_a, "_overlap_realtime.dat");
+    strcat(fname_a, "_obs_realtime.dat");
     file_overlap = fopen(fname_a, "w");
     if (file_overlap == NULL)
     {
@@ -310,7 +310,7 @@ int real_time_evolution(
 
     strcpy(fname_obs, "output/");
     strcat(fname_obs, prefix);
-    strcat(fname_obs, "_obs_realtime.dat");
+    strcat(fname_obs, "_log_realtime.dat");
 
     if (EQ->nt > 1000) display_info_stride = (EQ->nt / 1000);
     else               display_info_stride = 1;
@@ -441,7 +441,10 @@ int real_time_evolution(
         printf("\n\nImpossible to open file %s\n\n", fname_obs);
         exit(EXIT_FAILURE);
     }
-    fprintf(file_obs, "%.6lf %.6lf %.6lf\n", 0.0, energy, den_overlap);
+    fprintf(file_obs,
+            "%.6lf %.6lf %.6lf %.6lf\n",
+            0.0, energy, norm_a, norm_b
+    );
     fclose(file_obs);
     fprintf(file_overlap, "%.6lf %.6lf\n", 0.0, den_overlap);
 
@@ -542,8 +545,9 @@ int real_time_evolution(
         {
             carrAbs2(grid_points, Sa, abs_square_a);
             carrAbs2(grid_points, Sb, abs_square_b);
+            norm_a = Rsimps2D_sphere(nphi, ntheta, theta, abs_square_a, dphi);
+            norm_b = Rsimps2D_sphere(nphi, ntheta, theta, abs_square_b, dphi);
             energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
-            den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
             file_obs = fopen(fname_obs, "a");
             if (file_obs == NULL)
             {
@@ -551,8 +555,8 @@ int real_time_evolution(
                 exit(EXIT_FAILURE);
             }
             fprintf(file_obs,
-                    "%.6lf %.6lf %.6lf\n",
-                    (k + 1) * dt, energy, den_overlap
+                    "%.6lf %.6lf %.6lf %.6lf\n",
+                    0.0, energy, norm_a, norm_b
             );
             fclose(file_obs);
             file_ptr_a = fopen(fname_a, "a");
@@ -576,7 +580,11 @@ int real_time_evolution(
         carrAbs2(grid_points, Sa, abs_square_a);
         carrAbs2(grid_points, Sb, abs_square_b);
         den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
-        fprintf(file_overlap, "%.6lf %.6lf\n", (k + 1) * dt, den_overlap);
+        lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
+        lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+        fprintf(file_overlap, "%.6lf %.6lf %.6lf %.6lf\n",
+                (k + 1) * dt, den_overlap, lza, lzb
+        );
 
     }
 
