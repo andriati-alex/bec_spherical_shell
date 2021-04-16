@@ -823,6 +823,11 @@ int splitstep_spherical_shell(EqDataPkg EQ, Carray Sa, Carray Sb)
             old_mu_a = mu_a;
             old_mu_b = mu_b;
         }
+        if (fabs(energy) > 1.0 / dtheta && fabs(energy) > 1.0 / dphi)
+        {
+            printf("\n\nWARNING : Collapse indicator. Abort...\n\n");
+            break;
+        }
 
     }
 
@@ -1173,6 +1178,11 @@ int splitstep_theta_sphere(
             prev_mu_a = mu_a;
             prev_mu_b = mu_b;
         }
+        if (fabs(energy) > 1.0 / dtheta)
+        {
+            printf("\n\nWARNING : Collapse may have occured. Abort...\n\n");
+            break;
+        }
 
     }
 
@@ -1192,5 +1202,5 @@ int splitstep_theta_sphere(
     free(l_decomp_b);
     free(u_decomp_b);
 
-    return EQ->nt + 1;
+    return k + 1;
 }

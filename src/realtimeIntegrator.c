@@ -446,7 +446,10 @@ int real_time_evolution(
             0.0, energy, norm_a, norm_b
     );
     fclose(file_obs);
-    fprintf(file_overlap, "%.6lf %.6lf\n", 0.0, den_overlap);
+    fprintf(file_overlap,
+            "%.10lf %.10lf %.10lf %.10lf\n",
+            0.0, den_overlap, lza, lzb
+    );
 
     // Start time evolution
     for (k = 0; k < EQ->nt; k++)
@@ -582,9 +585,14 @@ int real_time_evolution(
         den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
         lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
         lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
-        fprintf(file_overlap, "%.6lf %.6lf %.6lf %.6lf\n",
+        fprintf(file_overlap, "%.10lf %.10lf %.10lf %.10lf\n",
                 (k + 1) * dt, den_overlap, lza, lzb
         );
+        if (fabs(kin_energy) > 1.0 / dtheta)
+        {
+            printf("WARNING : possible collapse. Abort...");
+            break;
+        }
 
     }
 
@@ -605,5 +613,5 @@ int real_time_evolution(
 
     m = DftiFreeDescriptor(&desc);
 
-    return EQ->nt + 1;
+    return k;
 }
