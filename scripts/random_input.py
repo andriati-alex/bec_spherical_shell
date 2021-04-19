@@ -17,11 +17,15 @@ def general_spherical_state(lmax, phi_pts, tht_pts, seed):
         np.linspace(0, 2 * pi, phi_pts), np.linspace(0, pi, tht_pts)
     )
     grid_noise = np.zeros([tht_pts, phi_pts], dtype=np.complex128)
-    grid_noise[1 : tht_pts - 1, 1 : phi_pts - 1] = 0.25 * (
-        rand_generator.random([tht_pts - 2, phi_pts - 2])
-        + 1.0j * rand_generator.random([tht_pts - 2, phi_pts - 2])
-        - 0.5
-        - 0.5j
+    grid_noise[1 : tht_pts - 1, 1 : phi_pts - 1] = (
+        0.25
+        * (
+            rand_generator.random([tht_pts - 2, phi_pts - 2])
+            + 1.0j * rand_generator.random([tht_pts - 2, phi_pts - 2])
+            - 0.5
+            - 0.5j
+        )
+        * np.sin(tht)
     )
     psi = sph_harm(0, 0, phi, tht) + grid_noise
     number_sph_harm = int((2 * lmax + 1 + 1) * (lmax + 1) / 2)
