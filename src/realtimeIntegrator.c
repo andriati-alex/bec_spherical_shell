@@ -559,7 +559,7 @@ int real_time_evolution(
             }
             fprintf(file_obs,
                     "%.6lf %.6lf %.6lf %.6lf\n",
-                    0.0, energy, norm_a, norm_b
+                    (k + 1) * dt, energy, norm_a, norm_b
             );
             fclose(file_obs);
             file_ptr_a = fopen(fname_a, "a");
