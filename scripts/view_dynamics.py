@@ -74,7 +74,7 @@ class TimeDependentState:
         Parameters
         ---
         `data_path` : ``str``
-            valid path to a folder with all .dat files from main program output
+            path to a folder with all .dat files from main program output
         `prefix` : ``str``
             file prefix convention (common part for all .dat file names)
 
@@ -106,7 +106,7 @@ class TimeDependentState:
 
     def nearest_theta_index(self, theta_value):
         """ Return index of theta array with value closest to `theta_value` """
-        return (self.theta - theta_value).argmin()
+        return abs(self.theta - theta_value).argmin()
 
     def get_state_a(self, frame_index=0):
         """ Return state of species A at some `frame_index` """
@@ -138,19 +138,20 @@ class TimeDependentState:
 
     def cartesian_grid(self, radius=1, offset=(0, 0, 0)):
         """
-        Generate cartesian grid points of sphere centered at `offset`
+        Generate cartesian grid points of surface in
+        spherical coordinates centered at `offset`
 
         Parameters
         ---
         `radius` : ``float`` or ``numpy.array``
-            radius of surface as function of spherical angles
+            surface radius as function of spherical angles
         `offset` :  ``tuple`` (float, float, float)
-            cartesian coordinates of surface center
+            cartesian coordinates of surface center (radius origin)
 
         Return
         ---
         ``tuple``
-            (`x`, `y`, `z`) numpy grids with sphere surface coordinates
+            (`x`, `y`, `z`) numpy grids with surface surface coordinates
 
         """
         phi_grid, tht_grid = np.meshgrid(self.phi, self.theta)
@@ -192,7 +193,7 @@ class TimeDependentState:
         dena, denb = self.get_densities(frame_index)
         return dena[theta_ind], denb[theta_ind]
 
-    def plot_all_densities(self, frame_index=0, view_angle=(0, 0), cmap="jet"):
+    def plot_all_densities(self, frame_index=0, view_args=(0, 0), cmap="jet"):
         """
         Plot 3 spheres with colormaps corresponding to densities
         From left to right : density A / density B / overall density
@@ -201,8 +202,9 @@ class TimeDependentState:
         ---
         `frame_index` : ``int``
             frame number (row in .dat files)
-        `view_angle` : ``tuple`` (float, float)
-            angles of mayavi view. See documentation
+        `view_args` : ``tuple`` (float, float)
+            mayavi view arguments. See documentation
+            https://docs.enthought.com/mayavi/mayavi
         `cmap` : ``str``
             available colormap name. Consult matplotlib API
 
@@ -219,10 +221,10 @@ class TimeDependentState:
         mlab.mesh(xa, ya, za, scalars=norm_den_a, colormap=cmap)
         mlab.mesh(xb, yb, zb, scalars=norm_den_b, colormap=cmap)
         mlab.mesh(x, y, z, scalars=norm_total_den, colormap=cmap)
-        mlab.view(*view_angle)
+        mlab.view(*view_args)
 
     def plot_density(
-        self, frame_index=0, species="A", view_angle=(0, 0), cmap="jet"
+        self, frame_index=0, species="A", view_args=(0, 0), cmap="jet"
     ):
         """
         Plot and show density mapped to colors in a sphere
@@ -233,8 +235,9 @@ class TimeDependentState:
             frame number (row in .dat files)
         `species` : "A" or "B"
             species type according to filename convention
-        `view_angle` : ``tuple`` (float, float)
-            angles of mayavi view. See documentation
+        `view_args` : ``tuple`` (float, float)
+            mayavi view arguments. See documentation
+            https://docs.enthought.com/mayavi/mayavi
         `cmap` : ``str``
             available colormap name. Consult matplotlib API
 
@@ -247,10 +250,10 @@ class TimeDependentState:
         else:
             norm_den = self.normalize_density(self.get_density_b(frame_index))
         mlab.mesh(x, y, z, scalars=norm_den, colormap=cmap)
-        mlab.view(*view_angle)
+        mlab.view(*view_args)
 
     def plot_radial_surface(
-        self, frame_index=0, species="A", view_angle=(0, 0)
+        self, frame_index=0, species="A", view_args=(0, 0)
     ):
         """
         Use density as radial distance and phase as colors
@@ -261,8 +264,9 @@ class TimeDependentState:
             frame number (row in .dat files)
         `species` : "A" or "B"
             species type according to filename convention
-        `view_angle` : ``tuple`` (float, float)
-            angles of mayavi view. See documentation
+        `view_args` : ``tuple`` (float, float)
+            mayavi view arguments. See documentation
+            https://docs.enthought.com/mayavi/mayavi
 
         """
         mlab.figure(bgcolor=(1.0, 1.0, 1.0), size=(800, 600))
@@ -276,7 +280,7 @@ class TimeDependentState:
         phase = np.arctan2(state.imag, state.real)
         x, y, z = self.cartesian_grid(norm_den)
         mlab.mesh(x, y, z, scalars=phase, colormap="hsv")
-        mlab.view(*view_angle)
+        mlab.view(*view_args)
 
     def __videoclip_frame_radial_surface(self, t):
         """
@@ -293,6 +297,7 @@ class TimeDependentState:
         den = self.normalize_density(self.get_density_a(frame_index))
         x, y, z = self.cartesian_grid(den)
         mlab.mesh(x, y, z, scalars=phase, colormap="hsv")
+        mlab.view(*(self.__anim_view_args))
         return mlab.screenshot(antialiased=True)
 
     def __videoclip_frame(self, t):
@@ -307,6 +312,7 @@ class TimeDependentState:
         frame_index = self.frame_from_time(t_scale)
         den = self.normalize_density(self.get_density_a(frame_index))
         mlab.mesh(*(self.__anim_sphere_grid), scalars=den, colormap="jet")
+        mlab.view(*(self.__anim_view_args))
         return mlab.screenshot(antialiased=True)
 
     def videoclip_obj(
@@ -315,7 +321,9 @@ class TimeDependentState:
         stop=None,
         anim_duration=30,
         fig_size=(800, 600),
+        view_args=(),
         display_phase=False,
+        end_rest=0.5,
     ):
         """Generate animation object using `moviepy` module
         Consult methods to write the returned videoclip
@@ -330,8 +338,13 @@ class TimeDependentState:
             output movie duration in seconds
         `fig_size` : ``tuple`` (width, height)
             figure size to display the animation
+        `view_args` : ``tuple`` of floats
+            mayavi view arguments. See documentation
+            https://docs.enthought.com/mayavi/mayavi
         `display_phase` : ``bool``
             Whether to use radial plot and display phase as colormap (True)
+        `end_rest` : ``float``
+            Time in seconds to freeze in the last frame
 
         Return
         ---
@@ -341,13 +354,16 @@ class TimeDependentState:
         """
         mlab.figure(bgcolor=(1.0, 1.0, 1.0), size=fig_size)
         mlab.clf()
+        mlab.view(*view_args)
         f = mlab.gcf()
         f.scene._lift()
-        stop = self.time_den[-1]
+        if stop is None:
+            stop = self.time_den[-1]
         self.__t_start = start
         self.__t_stop = stop
+        self.__anim_view_args = view_args
         self.__anim_sphere_grid = self.cartesian_grid()
-        self.__anim_duration = anim_duration - 0.5
+        self.__anim_duration = anim_duration - end_rest
         if display_phase:
             anim_method = self.__videoclip_frame_radial_surface
         else:
