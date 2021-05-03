@@ -96,27 +96,18 @@ class BdGOperator:
         fb,
         neigs=80,
         sigma=1.414213562 + 0.31415926j,
+        y=2.0,
     ):
-        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
+        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb, y)
         eigvals, eigvecs = sp.linalg.eigs(mat, neigs, which="LM", sigma=sigma)
         return np.sort(eigvals)[::-1]
 
-    def all_eig(
-        self,
-        m,
-        mu_a,
-        mu_b,
-        ga,
-        gb,
-        gab,
-        fa,
-        fb,
-    ):
-        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb)
+    def all_eig(self, m, mu_a, mu_b, ga, gb, gab, fa, fb, y=2.0):
+        mat = self.sparse_diag2(m, mu_a, mu_b, ga, gb, gab, fa, fb, y)
         eigvals, eigvecs = eig(mat.toarray())
         return np.sort(eigvals)[::-1]
 
-    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa, fb):
+    def sparse_diag2(self, m, mu_a, mu_b, ga, gb, gab, fa, fb, y=2.0):
         dtht = self.dtht
         npts = self.tht_pts
         nabl = self.nabla_factor
@@ -228,7 +219,7 @@ class BdGOperator:
         diag_upp1 = np.zeros(npts)
         diag_upp1[1 : npts - 2] = nabla_array.copy()
         if sa + m == 0:
-            diag_upp1[0] = 2 * nabl * (1.0 / dtht / dtht)
+            diag_upp1[0] = y * nabl * (1.0 / dtht / dtht)
             diag_upp1[npts - 2] = nabl * (
                 1.0 / dtht / dtht
                 + 0.5 * cos_th[npts - 2] / sin_th[npts - 2] / dtht
@@ -237,7 +228,7 @@ class BdGOperator:
         diag_upp2 = np.zeros(npts)
         diag_upp2[1 : npts - 2] = sign * nabla_array.copy()
         if sa - m == 0:
-            diag_upp2[0] = 2 * sign * nabl * (1.0 / dtht / dtht)
+            diag_upp2[0] = y * sign * nabl * (1.0 / dtht / dtht)
             diag_upp2[npts - 2] = sign * (
                 nabl
                 * (
@@ -249,7 +240,7 @@ class BdGOperator:
         diag_upp3 = np.zeros(npts)
         diag_upp3[1 : npts - 2] = nabla_array.copy()
         if sb + m == 0:
-            diag_upp3[0] = 2 * nabl * (1.0 / dtht / dtht)
+            diag_upp3[0] = y * nabl * (1.0 / dtht / dtht)
             diag_upp3[npts - 2] = nabl * (
                 1.0 / dtht / dtht
                 + 0.5 * cos_th[npts - 2] / sin_th[npts - 2] / dtht
@@ -258,7 +249,7 @@ class BdGOperator:
         diag_upp4 = np.zeros(npts - 1)
         diag_upp4[1 : npts - 2] = sign * nabla_array.copy()
         if sb - m == 0:
-            diag_upp4[0] = 2 * sign * nabl * (1.0 / dtht / dtht)
+            diag_upp4[0] = y * sign * nabl * (1.0 / dtht / dtht)
             diag_upp4[npts - 2] = sign * (
                 nabl
                 * (
@@ -281,7 +272,7 @@ class BdGOperator:
             diag_low1[0] = nabl * (
                 1.0 / dtht / dtht - 0.5 * cos_th[1] / sin_th[1] / dtht
             )
-            diag_low1[npts - 2] = 2 * nabl * (1.0 / dtht / dtht)
+            diag_low1[npts - 2] = y * nabl * (1.0 / dtht / dtht)
 
         diag_low2 = np.zeros(npts)
         diag_low2[1 : npts - 2] = sign * nabla_array.copy()
@@ -289,7 +280,7 @@ class BdGOperator:
             diag_low2[0] = sign * (
                 nabl * (1.0 / dtht / dtht - 0.5 * cos_th[1] / sin_th[1] / dtht)
             )
-            diag_low2[npts - 2] = 2 * sign * nabl * (1.0 / dtht / dtht)
+            diag_low2[npts - 2] = y * sign * nabl * (1.0 / dtht / dtht)
 
         diag_low3 = np.zeros(npts)
         diag_low3[1 : npts - 2] = nabla_array.copy()
@@ -297,7 +288,7 @@ class BdGOperator:
             diag_low3[0] = nabl * (
                 1.0 / dtht / dtht - 0.5 * cos_th[1] / sin_th[1] / dtht
             )
-            diag_low3[npts - 2] = 2 * nabl * (1.0 / dtht / dtht)
+            diag_low3[npts - 2] = y * nabl * (1.0 / dtht / dtht)
 
         diag_low4 = np.zeros(npts - 1)
         diag_low4[1 : npts - 2] = sign * nabla_array.copy()
@@ -305,7 +296,7 @@ class BdGOperator:
             diag_low4[0] = sign * (
                 nabl * (1.0 / dtht / dtht - 0.5 * cos_th[1] / sin_th[1] / dtht)
             )
-            diag_low4[npts - 2] = 2 * sign * nabl * (1.0 / dtht / dtht)
+            diag_low4[npts - 2] = y * sign * nabl * (1.0 / dtht / dtht)
 
         diag_low = np.concatenate([diag_low1, diag_low2, diag_low3, diag_low4])
 

@@ -8,3 +8,4 @@ figures/*
 __pycache__
 backup_files/*
 job.conf
+*.txt

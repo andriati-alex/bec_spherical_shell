@@ -5,7 +5,7 @@ import numpy as np
 from math import pi
 
 
-def script_run(prefix, m_vals, n_eigs):
+def script_run(prefix, m_vals, n_eigs, files_path):
     suffix = "_imagtime.dat"
     eq_data = np.loadtxt(prefix + "_2species_equation" + suffix)
     njobs = eq_data.shape[0]
@@ -65,6 +65,13 @@ if __name__ == "__main__":
         help="prefix for file names = string before `species` keyword",
     )
     p.add_argument(
+        "--files-path",
+        dest="files_path",
+        type=str,
+        help="path to .dat files",
+        default=default_data_dir,
+    )
+    p.add_argument(
         "-mvals",
         dest="m_vals",
         nargs="+",
@@ -79,5 +86,5 @@ if __name__ == "__main__":
         help="number of eigenvalues to store for each case",
     )
     args = p.parse_args()
-    args.prefix = os.path.join(default_data_dir, args.prefix)
+    args.prefix = os.path.join(args.files_path, args.prefix)
     script_run(**vars(args))
