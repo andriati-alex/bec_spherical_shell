@@ -304,6 +304,63 @@ void _propagate_linear_theta(
 }
 
 
+void _propagate_linear_theta_equals(
+        EqDataPkg EQ, Carray upper, Carray l_decomp, Carray u_decomp,
+        int azi_a, int azi_b, Carray psi_th)
+{
+    int
+        ntheta;
+
+    double
+        frac_a,
+        frac_b;
+
+    Carray
+        cn_psi_tht_a,
+        cn_psi_tht_b,
+        cn_psi_tht_comb,
+        aux_workspace;
+
+    ntheta = EQ->ntheta;
+    frac_a = EQ->frac_a;
+    frac_b = EQ->frac_b;
+
+    cn_psi_tht_a = carrDef(ntheta);
+    cn_psi_tht_b = carrDef(ntheta);
+    cn_psi_tht_comb = carrDef(ntheta);
+    aux_workspace = carrDef(ntheta);
+
+    _explicit_theta(EQ, azi_a, psi_th, cn_psi_tht_a);
+    _explicit_theta(EQ, azi_b, psi_th, cn_psi_tht_b);
+    for (int j = 0; j < ntheta; j++)
+    {
+        cn_psi_tht_comb[j] = frac_a * cn_psi_tht_a[j] + frac_b * cn_psi_tht_b[j];
+    }
+
+    // Solve for azimuthal number == 0
+    if (azi_a == 0 && azi_b == 0)
+    {
+        tridiag_lu(
+                ntheta, upper, l_decomp, u_decomp,
+                aux_workspace, cn_psi_tht_comb, psi_th
+        );
+    }
+    else
+    {
+        tridiag_lu(
+                ntheta - 2, upper, l_decomp, u_decomp,
+                aux_workspace, &cn_psi_tht_comb[1], &psi_th[1]);
+        psi_th[0] = 0.0 + 0.0 * I;
+        psi_th[ntheta-1] = 0.0 + 0.0 * I;
+    }
+
+    free(cn_psi_tht_a);
+    free(cn_psi_tht_b);
+    free(cn_psi_tht_comb);
+    free(aux_workspace);
+}
+
+
 int splitstep_spherical_shell_single(EqDataPkg EQ, Carray S)
 {
 
@@ -1201,6 +1258,330 @@ int splitstep_theta_sphere(
     free(u_decomp_a);
     free(l_decomp_b);
     free(u_decomp_b);
+
+    return k + 1;
+}
+
+
+
+int splitstep_theta_sphere_equals(
+        EqDataPkg EQ, Carray Sa, Carray Sb, int azi_a, int azi_b)
+{
+
+    int
+        j,
+        k,
+        ntheta,
+        display_info_stride;
+    double
+        mu_a,
+        mu_b,
+        energy,
+        kin_energy,
+        prev_mu_a,
+        prev_mu_b,
+        prev_e,
+        sin_sq,
+        azi_sq,
+        dtheta,
+        nabla_coef,
+        omega,
+        frac_a,
+        frac_b,
+        ga,
+        gb,
+        gab,
+        Idt,
+        den_overlap;
+    double complex
+        dt;
+    Carray
+        inter_evol_op,
+        mid_a,
+        mid_b,
+        upper_a,
+        lower_a,
+        upper_b,
+        lower_b,
+        upper_comb,
+        lower_comb,
+        mid_comb,
+        l_decomp,
+        u_decomp,
+        linear_part;
+    Rarray
+        theta,
+        abs_square_a,
+        abs_square_b,
+        inter_pot;
+
+    dt  = - I * EQ->dt;
+    Idt = - EQ->dt;
+
+    display_info_stride = (EQ->nt / 1000) + 1;
+
+    ntheta = EQ->ntheta;
+    dtheta = EQ->dtheta;
+    nabla_coef = EQ->nabla_coef;
+    omega = EQ->omega;
+    frac_a = EQ->frac_a;
+    frac_b = EQ->frac_b;
+    ga = EQ->ga;
+    gb = EQ->gb;
+    gab = EQ->gab;
+    theta = EQ->theta;
+
+    abs_square_a = rarrDef(ntheta);     // |Psi_a|^2
+    abs_square_b = rarrDef(ntheta);     // |Psi_b|^2
+    inter_pot = rarrDef(ntheta);        // interaction potential
+    inter_evol_op = carrDef(ntheta);    // exp[-i * dt/2 * inter_pot]
+    linear_part = carrDef(ntheta);      // enter linear solver
+
+    upper_a = carrDef(ntheta - 1);
+    lower_a = carrDef(ntheta - 1);
+    upper_b = carrDef(ntheta - 1);
+    lower_b = carrDef(ntheta - 1);
+
+    mid_a = carrDef(ntheta);
+    mid_b = carrDef(ntheta);
+
+    lower_comb = carrDef(ntheta - 1);
+    upper_comb = carrDef(ntheta - 1);
+    mid_comb = carrDef(ntheta);
+
+    l_decomp = carrDef(ntheta);
+    u_decomp = carrDef(ntheta);
+
+    azi_sq = azi_a * azi_a;
+    if (azi_sq != 0)
+    {
+        for (j = 0; j < ntheta - 2; j++)
+        {
+            sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
+            mid_a[j] = (I + nabla_coef * dt *
+                    (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi_a
+            );
+        }
+    }
+    else
+    {
+        for (j = 0; j < ntheta; j++)
+        {
+            mid_a[j] = I + nabla_coef * dt / dtheta / dtheta;
+        }
+    }
+    azi_sq = azi_b * azi_b;
+    if (azi_sq != 0)
+    {
+        for (j = 0; j < ntheta - 2; j++)
+        {
+            sin_sq = sin(theta[j + 1]) * sin(theta[j + 1]);
+            mid_b[j] = (I + nabla_coef * dt *
+                    (1.0 / dtheta / dtheta + 0.5 * azi_sq / sin_sq)
+                    + dt * omega * azi_b
+            );
+        }
+    }
+    else
+    {
+        for (j = 0; j < ntheta; j++)
+        {
+            mid_b[j] = I + nabla_coef * dt / dtheta / dtheta;
+        }
+    }
+    for (j = 0; j < ntheta; j++)
+    {
+        mid_comb[j] = frac_a * mid_a[j] + frac_b * mid_b[j];
+    }
+
+    if (azi_a != 0)
+    {
+        for (j = 1; j < ntheta - 2; j++)
+        {
+            upper_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j + 1]) / sin(theta[j + 1]) / dtheta
+            );
+        }
+    }
+    else
+    {
+        for (j = 1; j < ntheta - 1; j++)
+        {
+            upper_a[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_a[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+        }
+        upper_a[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+        lower_a[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+    }
+
+    if (azi_b != 0)
+    {
+        for (j = 1; j < ntheta - 2; j++)
+        {
+            upper_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j + 1]) / sin(theta[j + 1]) / dtheta
+            );
+        }
+    }
+    else
+    {
+        for (j = 1; j < ntheta - 1; j++)
+        {
+            upper_b[j] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    - 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+            lower_b[j - 1] = nabla_coef * dt * (-0.5 / dtheta / dtheta
+                    + 0.25 * cos(theta[j]) / sin(theta[j]) / dtheta
+            );
+        }
+        upper_b[0] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+        lower_b[ntheta - 2] = 2 * (-0.5 * nabla_coef * dt / dtheta / dtheta);
+    }
+    for (j = 0; j < ntheta - 1; j++)
+    {
+        upper_comb[j] = frac_a * upper_a[j] + frac_b * upper_b[j];
+        lower_comb[j] = frac_a * lower_a[j] + frac_b * lower_b[j];
+    }
+
+    if (azi_a == 0 && azi_b == 0)
+    {
+        lu_decomposition(
+                ntheta, upper_comb, lower_comb, mid_comb, l_decomp, u_decomp
+        );
+    }
+    else
+    {
+        lu_decomposition(
+                ntheta - 2, upper_comb, lower_comb, mid_comb, l_decomp, u_decomp
+        );
+    }
+
+    printf("\n\nProgrs  Energy       Kinect");
+    printf("       mu_a         mu_b         overlap");
+    sepline();
+    carrAbs2(ntheta, Sa, abs_square_a);
+    carrAbs2(ntheta, Sb, abs_square_b);
+    energy = functionals_theta(
+            EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
+    );
+    den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
+    printf("\nazi_a = %d | azi_b = %d\n", azi_a, azi_b);
+    printf("%5.1lf%%", 0.0);
+    printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
+            energy, kin_energy, mu_a, mu_b, den_overlap);
+    prev_mu_a = mu_a;
+    prev_mu_b = mu_b;
+    prev_e = energy;
+
+    for (k = 0; k < EQ->nt; k++)
+    {
+        carrAbs2(ntheta, Sa, abs_square_a);
+
+        // A) interaction part half time step
+
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (
+                    (frac_a * ga + frac_b * gb) * abs_square_a[j] +
+                    + 2 * sqrt(frac_b * frac_a) * gab * abs_square_a[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, Sa, linear_part);
+
+        // A) linear part entire time step
+
+        _propagate_linear_theta_equals(
+                EQ, upper_comb, l_decomp, u_decomp, azi_a, azi_b, linear_part
+        );
+
+        // A) transfer data
+        carrCopy(ntheta, linear_part, Sa);
+
+        // ANOTHER HALF STEP OF INTERACTION EVOLUTION OPERATOR
+        // Note that the interaction potential will be updated
+
+        carrAbs2(ntheta, Sa, abs_square_a);
+
+        // species A - `linear_part` as workspace array
+
+        for (j = 0; j < ntheta; j++)
+        {
+            inter_pot[j] = (
+                    (frac_a * ga + frac_b * gb) * abs_square_a[j] +
+                    + 2 * sqrt(frac_b * frac_a) * gab * abs_square_a[j]
+            );
+        }
+        rcarrExp(ntheta, 0.5 * Idt, inter_pot, inter_evol_op);
+        carrMultiply(ntheta, inter_evol_op, linear_part, Sa);
+
+        // Renormalize
+        renormalize_theta_sphere(EQ, Sa);
+
+        // Transfer data to second species
+        carrCopy(ntheta, Sa, Sb);
+
+        if ( (k + 1) % (display_info_stride) == 0 )
+        {
+            carrAbs2(ntheta, Sa, abs_square_a);
+            carrAbs2(ntheta, Sb, abs_square_b);
+            energy = functionals_theta(
+                    EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
+            );
+            den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
+            printf("%5.1lf%%",(100.0 * k) / EQ->nt);
+            printf("  %11.8lf  %11.8lf  %11.8lf  %11.8lf  %11.8lf\n",
+                    energy, kin_energy, mu_a, mu_b, den_overlap);
+            if  (
+                    (
+                    fabs(energy - prev_e)
+                    + fabs(mu_a - prev_mu_a)
+                    + fabs(mu_b - prev_mu_b)
+                    ) / fabs(energy) < 1E-10
+                )
+            {
+                printf("\nAchieved enough accuracy\n");
+                break;
+            }
+            prev_e = energy;
+            prev_mu_a = mu_a;
+            prev_mu_b = mu_b;
+        }
+        if (fabs(kin_energy) > 1.0 / dtheta)
+        {
+            printf("\n\nWARNING : Collapse may have occured. Abort...\n\n");
+            break;
+        }
+
+    }
+
+    free(inter_evol_op);
+    free(linear_part);
+    free(abs_square_a);
+    free(abs_square_b);
+    free(upper_a);
+    free(lower_a);
+    free(upper_b);
+    free(lower_b);
+    free(upper_comb);
+    free(lower_comb);
+    free(inter_pot);
+    free(mid_a);
+    free(mid_b);
+    free(mid_comb);
+    free(l_decomp);
+    free(u_decomp);
 
     return k + 1;
 }

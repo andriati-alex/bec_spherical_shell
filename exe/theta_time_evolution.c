@@ -470,7 +470,7 @@ int main(int argc, char * argv[])
 
         start = omp_get_wtime();
 
-        N = splitstep_theta_sphere(EQ, Sa, Sb, azi_a, azi_b);
+        N = splitstep_theta_sphere_equals(EQ, Sa, Sb, azi_a, azi_b);
         // Record data
         strcpy(fname, "output/");
         strcat(fname, outfname);
