@@ -8,6 +8,8 @@ from math import pi
 def script_run(prefix, m_vals, n_eigs, files_path):
     suffix = "_imagtime.dat"
     eq_data = np.loadtxt(prefix + "_2species_equation" + suffix)
+    if eq_data.ndim == 1:
+        eq_data = eq_data.reshape(1, eq_data.size)
     njobs = eq_data.shape[0]
     tht_pts = int(eq_data[0, 0])
     frac_a = eq_data[0, 5]
@@ -18,6 +20,8 @@ def script_run(prefix, m_vals, n_eigs, files_path):
     gb_sweep = eq_data[:, 8] / (2 * pi)
     gab_sweep = eq_data[:, 9] / (2 * pi)
     obs_data = np.loadtxt(prefix + "_2species_obs" + suffix)
+    if obs_data.ndim == 1:
+        obs_data = obs_data.reshape(1, obs_data.size)
     mu_a_sweep = obs_data[:, 2]
     mu_b_sweep = obs_data[:, 3]
     bdg = bdg_driver.BdGOperator(tht_pts, vort_a, vort_b, frac_a, frac_b)
