@@ -10,4 +10,6 @@
 
 void stationaryNewton(EqDataPkg, Rarray, Rarray, double, int, double, double, int, int);
 
+double functionals_newton(EqDataPkg, Rarray, Rarray, double *, int, int);
+
 #endif

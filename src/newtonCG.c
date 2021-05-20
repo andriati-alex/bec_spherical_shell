@@ -423,6 +423,124 @@ int conjgrad_stab(
 }
 
 
+double functionals_newton(EqDataPkg EQ, Rarray state_a, Rarray state_b,
+        double * kin, int azi_a, int azi_b)
+{
+
+    int
+        j,
+        ntheta;
+    double
+        norm,
+        sin_th,
+        dtheta,
+        nabla_part_a,
+        nabla_part_b,
+        total_energy,
+        ga,
+        gb,
+        gab,
+        nabla_coef;
+    Carray
+        cmplx_a,
+        cmplx_b,
+        der_a,
+        der_b;
+    Rarray
+        sin_arr,
+        theta,
+        Integ,
+        Integ_kin,
+        abs_square_der_a,
+        abs_square_der_b,
+        abs_square_a,
+        abs_square_b;
+
+    ntheta = EQ->ntheta;
+    dtheta = EQ->dtheta;
+    theta = EQ->theta;
+    ga = EQ->ga;
+    gb = EQ->gb;
+    gab = EQ->gab;
+    nabla_coef = EQ->nabla_coef;
+
+    cmplx_a = carrDef(ntheta);
+    cmplx_b = carrDef(ntheta);
+    der_a = carrDef(ntheta);
+    der_b = carrDef(ntheta);
+
+    sin_arr = rarrDef(ntheta);
+    Integ = rarrDef(ntheta);
+    Integ_kin = rarrDef(ntheta);
+    abs_square_a = rarrDef(ntheta);
+    abs_square_b = rarrDef(ntheta);
+    abs_square_der_a = rarrDef(ntheta);
+    abs_square_der_b = rarrDef(ntheta);
+
+    carrCopy_from_real(ntheta, state_a, cmplx_a);
+    carrCopy_from_real(ntheta, state_b, cmplx_b);
+
+    derivative_1dreflection(ntheta, cmplx_a, dtheta, der_a, azi_a);
+    derivative_1dreflection(ntheta, cmplx_b, dtheta, der_b, azi_b);
+    carrAbs2(ntheta, der_a, abs_square_der_a);
+    carrAbs2(ntheta, der_b, abs_square_der_b);
+
+    carrAbs2(ntheta, cmplx_a, abs_square_a);
+    carrAbs2(ntheta, cmplx_a, abs_square_b);
+
+    // Setup function to integrate
+    for (j = 1; j < ntheta - 1; j++)
+    {
+        sin_th = sin(theta[j]);
+        sin_arr[j] = sin(theta[j]);
+        nabla_part_a = -nabla_coef * (
+                abs_square_der_a[j] +
+                azi_a * azi_a * abs_square_a[j] / sin_th / sin_th
+        );
+        nabla_part_b = -nabla_coef * (
+                abs_square_der_b[j] +
+                azi_b * azi_b * abs_square_b[j] / sin_th / sin_th
+        );
+        Integ_kin[j] = sin_th * (nabla_part_a + nabla_part_b);
+        Integ[j] = sin_th * (
+                nabla_part_a +
+                nabla_part_b +
+                0.5 * ga * abs_square_a[j] * abs_square_a[j] +
+                0.5 * gb * abs_square_b[j] * abs_square_b[j] +
+                gab * abs_square_a[j] * abs_square_b[j]
+        );
+    }
+    Integ[0] = 0.0;
+    Integ[ntheta - 1] = 0.0;
+    Integ_kin[0] = 0.0;
+    Integ_kin[ntheta - 1] = 0.0;
+    sin_arr[0] = 0;
+    sin_arr[ntheta - 1] = 0;
+
+    norm = (
+            Rsimps1D_jac(ntheta, abs_square_a, dtheta, sin_arr) +
+            Rsimps1D_jac(ntheta, abs_square_b, dtheta, sin_arr)
+    );
+
+    total_energy = Rsimps1D(ntheta, Integ, dtheta) / norm;
+    (* kin) = Rsimps1D(ntheta, Integ_kin, dtheta) / norm;
+
+    free(sin_arr);
+    free(cmplx_a);
+    free(cmplx_b);
+    free(abs_square_der_a);
+    free(abs_square_der_b);
+    free(abs_square_a);
+    free(abs_square_b);
+    free(Integ_kin);
+    free(Integ);
+    free(der_a);
+    free(der_b);
+
+    return total_energy;
+}
+
+
 void stationaryNewton(
         EqDataPkg EQ,
         Rarray Sa,
@@ -441,6 +559,8 @@ void stationaryNewton(
         Niter,
         CGiter;
     double
+        energy,
+        kin,
         dtht,
         norm1,
         norm2,
@@ -493,8 +613,10 @@ void stationaryNewton(
     pkg_real_states(grid_res_a, grid_res_b, newton_res);
     error_newton = sqrt(self_inner_cg(newton_res, workspace, EQ->theta));
 
-    printf("\nIt    Error      CGit   norm1      norm2");
+    printf("\nIt    Error      CGit   norm1      norm2      energy     kin");
     sepline();
+
+    energy = functionals_newton(EQ, Sa, Sb, &kin, vort_a, vort_b);
 
     // NEWTON LOOP
     Niter = 0;
@@ -502,7 +624,7 @@ void stationaryNewton(
     while (error_newton > err_tol)
     {
         printf("%2d   %9.6lf  %5d  ", Niter, error_newton, CGiter);
-        printf("%9.6lf  %9.6lf\n", norm1, norm2);
+        printf("%9.6lf  %9.6lf  %9.6lf  %9.6lf\n", norm1, norm2, energy, kin);
 
         // Initial guess for conjugate-gradient method
         carrFill(N, 0.0, conj_grad->speca);
@@ -550,10 +672,12 @@ void stationaryNewton(
         rarrAbs2(N, Sb, abs_square_b);
         norm1 = Rsimps1D_jac(N, abs_square_a, dtht, sin_th);
         norm2 = Rsimps1D_jac(N, abs_square_b, dtht, sin_th);
+
+        energy = functionals_newton(EQ, Sa, Sb, &kin, vort_a, vort_b);
     }
 
     printf("%2d   %9.6lf  %5d  ", Niter, error_newton, CGiter);
-    printf("%9.6lf  %9.6lf", norm1, norm2);
+    printf("%9.6lf  %9.6lf  %9.6lf  %9.6lf\n", norm1, norm2, energy, kin);
     sepline();
 
     if (Niter > iter_tol)

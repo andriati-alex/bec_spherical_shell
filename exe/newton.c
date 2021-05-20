@@ -64,17 +64,13 @@ void save_equation_setup(
         exit(EXIT_FAILURE);
     }
 
-    // Grid domain
-    fprintf(txt_file_ptr, "%d %.10lf %.10lf", EQ->ntheta, mu_a, mu_b);
-
     // Equation parameters
     fprintf(
             txt_file_ptr,
-            "%.2lf %.2lf %.4lf %.4lf %.10lf %.10lf %.10lf %d %d\n",
-            EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
-            2 * PI * EQ->ga, 2 * PI * EQ->gb, 2 * PI * EQ->gab,
-            azi_a, azi_b
+            "%d %.2lf %.2lf %.10lf %.10lf %d %d\n",
+            EQ->ntheta, EQ->nabla_coef, EQ->omega, mu_a, mu_b, azi_a, azi_b
     );
+
     fclose(txt_file_ptr);
 }
 
@@ -86,10 +82,13 @@ void save_obs_2species(
     int
         ntheta;
     double
-        mu_a,
-        mu_b,
+        ga,
+        gb,
+        gab,
         norm_a,
         norm_b,
+        frac_a,
+        frac_b,
         energy,
         kin_energy,
         den_overlap;
@@ -97,9 +96,6 @@ void save_obs_2species(
         sin_th,
         abs_square_a,
         abs_square_b;
-    Carray
-        cmplx_sa,
-        cmplx_sb;
     char
         fname[100];
     FILE
@@ -112,22 +108,22 @@ void save_obs_2species(
     {
         sin_th[i] = sin(EQ->theta[i]);
     }
-    norm_a = Rsimps1D_jac(ntheta, Sa, EQ->dtheta, sin_th);
-    norm_b = Rsimps1D_jac(ntheta, Sb, EQ->dtheta, sin_th);
 
-    cmplx_sa = carrDef(ntheta);
-    cmplx_sb = carrDef(ntheta);
     abs_square_a = rarrDef(ntheta);
     abs_square_b = rarrDef(ntheta);
 
-    carrCopy_from_real(ntheta, Sa, cmplx_sa);
-    carrCopy_from_real(ntheta, Sb, cmplx_sb);
     rarrAbs2(ntheta, Sa, abs_square_a);
     rarrAbs2(ntheta, Sb, abs_square_b);
 
-    energy = functionals_theta(
-            EQ, cmplx_sa, cmplx_sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
-    );
+    norm_a = Rsimps1D_jac(ntheta, abs_square_a, EQ->dtheta, sin_th);
+    norm_b = Rsimps1D_jac(ntheta, abs_square_b, EQ->dtheta, sin_th);
+    frac_a = norm_a / (norm_a + norm_b);
+    frac_b = norm_b / (norm_a + norm_b);
+    ga = EQ->ga * norm_a * (2 * PI);
+    gb = EQ->gb * norm_b * (2 * PI);
+    gab = EQ->gab * sqrt(norm_b * norm_b) * (2 * PI);
+
+    energy = functionals_newton(EQ, Sa, Sb, &kin_energy, azi_a, azi_b);
     den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
 
     strcpy(fname, "output/");
@@ -144,13 +140,15 @@ void save_obs_2species(
     }
 
     fprintf(txt_file_ptr,
-            "%.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf\n",
-            energy, kin_energy, mu_a, mu_b, den_overlap, norm_a, norm_b
+            "%.10lf %.10lf %.10lf %.10lf %.10lf ",
+            energy, kin_energy, den_overlap, norm_a, norm_b
+    );
+    fprintf(txt_file_ptr,
+            "%.10lf %.10lf %.10lf %.10lf %.10lf\n",
+            frac_a, frac_b, ga, gb, gab
     );
 
     free(sin_th);
-    free(cmplx_sa);
-    free(cmplx_sb);
     free(abs_square_b);
     free(abs_square_a);
     fclose(txt_file_ptr);
