@@ -261,6 +261,19 @@ void pkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
     carrImagPart(S->nphi * S->ntht, S->specb, S->specb_im);
 }
 
+void pkg_real_states(Rarray Sa, Rarray Sb, TwoSpeciesState S)
+{
+    rarrCopy(S->nphi * S->ntht, Sa, S->speca_re);
+    rarrCopy(S->nphi * S->ntht, Sb, S->specb_re);
+    rarrFill(S->nphi * S->ntht, 0.0, S->specb_im);
+    rarrFill(S->nphi * S->ntht, 0.0, S->specb_im);
+    for (int i = 0; i < S->nphi * S->ntht; i++)
+    {
+        S->speca[i] = Sa[i] + 0.0 * I;
+        S->specb[i] = Sb[i] + 0.0 * I;
+    }
+}
+
 
 void unpkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
 {
@@ -274,7 +287,7 @@ void unpkg_states(Carray Sa, Carray Sb, TwoSpeciesState S)
 
 /* ========================================================================
    ========================================================================
- 
+
                                MEMORY RELEASE
 
    ========================================================================

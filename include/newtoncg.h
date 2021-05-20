@@ -8,10 +8,6 @@
 #include "observables.h"
 #include "arrayOperations.h"
 
-void stationaryNewton(EqDataPkg EQ, Carray Sa, Carray Sb,
-        double err_tol, int iter_tol, double mu_a, double mu_b);
-
-void stationaryFixedNorm(EqDataPkg EQ, Carray Sa, Carray Sb,
-        double err_tol, int iter_tol);
+void stationaryNewton(EqDataPkg, Rarray, Rarray, double, int, double, double, int, int);
 
 #endif

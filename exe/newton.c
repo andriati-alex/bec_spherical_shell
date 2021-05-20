@@ -38,7 +38,13 @@ void ReachNewLine(FILE * f)
 
 
 void save_equation_setup(
-        char prefix [], EqDataPkg EQ, int num_species, int line)
+        char prefix [],
+        EqDataPkg EQ,
+        double mu_a,
+        double mu_b,
+        int azi_a,
+        int azi_b,
+        int line)
 {
     char
         fname[100];
@@ -47,8 +53,7 @@ void save_equation_setup(
 
     strcpy(fname, "output/");
     strcat(fname, prefix);
-    if (num_species == 1) strcat(fname, "_1species_equation_imagtime.dat");
-    else                  strcat(fname, "_2species_equation_imagtime.dat");
+    strcat(fname, "_equation_newton.dat");
 
     if (line > 1) txt_file_ptr = fopen(fname, "a");
     else          txt_file_ptr = fopen(fname, "w");
@@ -60,74 +65,74 @@ void save_equation_setup(
     }
 
     // Grid domain
-    fprintf(txt_file_ptr,
-            "%d %d %lf %d ",
-            EQ->nphi, EQ->ntheta, EQ->dt, EQ->nt
-    );
+    fprintf(txt_file_ptr, "%d %.10lf %.10lf", EQ->ntheta, mu_a, mu_b);
 
     // Equation parameters
-    if (num_species == 2)
-    {
-        fprintf(
-                txt_file_ptr,
-                "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf\n",
-                EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
-                EQ->ga, EQ->gb, EQ->gab
-        );
-    }
-    else
-    {
-        fprintf(txt_file_ptr,
-                "%.15lf %.15lf %.15lf\n",
-                EQ->nabla_coef, EQ->omega, EQ->ga
-        );
-    }
+    fprintf(
+            txt_file_ptr,
+            "%.2lf %.2lf %.4lf %.4lf %.10lf %.10lf %.10lf %d %d\n",
+            EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
+            2 * PI * EQ->ga, 2 * PI * EQ->gb, 2 * PI * EQ->gab,
+            azi_a, azi_b
+    );
     fclose(txt_file_ptr);
 }
 
 
 void save_obs_2species(
-        char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb, int line)
+        char prefix [], EqDataPkg EQ, Rarray Sa, Rarray Sb, int azi_a,
+        int azi_b, int line)
 {
     int
-        nphi,
         ntheta;
     double
-        dphi,
-        lza,
-        lzb,
         mu_a,
         mu_b,
+        norm_a,
+        norm_b,
         energy,
         kin_energy,
         den_overlap;
     Rarray
-        theta,
+        sin_th,
         abs_square_a,
         abs_square_b;
+    Carray
+        cmplx_sa,
+        cmplx_sb;
     char
         fname[100];
     FILE
         * txt_file_ptr;
 
-    nphi = EQ->nphi;
     ntheta = EQ->ntheta;
-    dphi = EQ->dphi;
-    theta = EQ->theta;
 
-    abs_square_a = rarrDef(nphi * ntheta);
-    abs_square_b = rarrDef(nphi * ntheta);
-    carrAbs2(nphi * ntheta, Sa, abs_square_a);
-    carrAbs2(nphi * ntheta, Sb, abs_square_b);
+    sin_th = rarrDef(ntheta);
+    for (int i = 0; i < ntheta; i++)
+    {
+        sin_th[i] = sin(EQ->theta[i]);
+    }
+    norm_a = Rsimps1D_jac(ntheta, Sa, EQ->dtheta, sin_th);
+    norm_b = Rsimps1D_jac(ntheta, Sb, EQ->dtheta, sin_th);
 
-    energy = functionals(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b);
-    den_overlap = density_overlap(EQ, abs_square_a, abs_square_b);
-    lza = angular_momentum_lz(nphi, ntheta, dphi, theta, Sa);
-    lzb = angular_momentum_lz(nphi, ntheta, dphi, theta, Sb);
+    cmplx_sa = carrDef(ntheta);
+    cmplx_sb = carrDef(ntheta);
+    abs_square_a = rarrDef(ntheta);
+    abs_square_b = rarrDef(ntheta);
+
+    carrCopy_from_real(ntheta, Sa, cmplx_sa);
+    carrCopy_from_real(ntheta, Sb, cmplx_sb);
+    rarrAbs2(ntheta, Sa, abs_square_a);
+    rarrAbs2(ntheta, Sb, abs_square_b);
+
+    energy = functionals_theta(
+            EQ, cmplx_sa, cmplx_sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
+    );
+    den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
 
     strcpy(fname, "output/");
     strcat(fname, prefix);
-    strcat(fname, "_2species_obs_imagtime.dat");
+    strcat(fname, "_obs_newton.dat");
 
     if (line > 1) txt_file_ptr = fopen(fname, "a");
     else          txt_file_ptr = fopen(fname, "w");
@@ -140,80 +145,29 @@ void save_obs_2species(
 
     fprintf(txt_file_ptr,
             "%.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf\n",
-            energy, kin_energy, mu_a, mu_b, den_overlap, lza, lzb
+            energy, kin_energy, mu_a, mu_b, den_overlap, norm_a, norm_b
     );
 
+    free(sin_th);
+    free(cmplx_sa);
+    free(cmplx_sb);
     free(abs_square_b);
     free(abs_square_a);
     fclose(txt_file_ptr);
 }
 
 
-void save_obs_1species(char prefix [], EqDataPkg EQ, Carray S, int line)
-{
-    int
-        nphi,
-        ntheta;
-    double
-        dphi,
-        lz,
-        mu,
-        energy,
-        kin_energy;
-    Rarray
-        theta,
-        abs_square;
-    char
-        fname[100];
-    FILE
-        * txt_file_ptr;
-
-    nphi = EQ->nphi;
-    ntheta = EQ->ntheta;
-    dphi = EQ->dphi;
-    theta = EQ->theta;
-
-    abs_square = rarrDef(nphi * ntheta);
-    carrAbs2(nphi * ntheta, S, abs_square);
-
-    energy = functionals_single(EQ, S, &kin_energy, &mu);
-    lz = angular_momentum_lz(nphi, ntheta, dphi, theta, S);
-
-    strcpy(fname, "output/");
-    strcat(fname, prefix);
-    strcat(fname, "_1species_obs_imagtime.dat");
-
-    if (line > 1) txt_file_ptr = fopen(fname, "a");
-    else          txt_file_ptr = fopen(fname, "w");
-
-    if (txt_file_ptr == NULL)
-    {
-        printf("\n\nERROR: impossible to open file %s\n\n", fname);
-        exit(EXIT_FAILURE);
-    }
-
-    fprintf(txt_file_ptr,
-            "%.10lf %.10lf %.10lf %.10lf\n",
-            energy, kin_energy, mu, lz
-    );
-
-    free(abs_square);
-    fclose(txt_file_ptr);
-}
-
-
-EqDataPkg setup_equation(char prefix [], int num_species, int line)
+EqDataPkg setup_equation(
+        char prefix [], int num_species, int line, int * azi_a, int * azi_b,
+        double * mu_a, double * mu_b)
 {
 
 /** Read line by line of _domain file and _eq to setup the equation **/
 
     int
         scanf_returned,
-        theta_grid_size,
-        phi_grid_size,
-        time_steps;
+        theta_grid_size;
     double
-        step_size,
         nabla_coef,
         rotation_freq,
         frac_a,
@@ -246,13 +200,17 @@ EqDataPkg setup_equation(char prefix [], int num_species, int line)
     for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
 
     scanf_returned = fscanf(
-            txt_file_ptr, "%lf %lf %lf %lf %lf %lf %lf",
-            &nabla_coef, &rotation_freq, &frac_a, &frac_b, &ga, &gb, &gab
+            txt_file_ptr, "%lf %lf %lf %lf %lf %lf %lf %d %d %lf %lf",
+            &nabla_coef, &rotation_freq, &frac_a, &frac_b, &ga, &gb, &gab,
+            azi_a, azi_b, mu_a, mu_b
     );
+    ga = ga / (2 * PI);
+    gb = gb / (2 * PI);
+    gab = gab / (2 * PI);
 
     fclose(txt_file_ptr);
 
-    if (scanf_returned != 7)
+    if (scanf_returned != 11)
     {
         printf("\n\nWrong number of parameters or bad format in %s", fname);
         exit(EXIT_FAILURE);
@@ -277,28 +235,18 @@ EqDataPkg setup_equation(char prefix [], int num_species, int line)
     // advance to the requested line
     for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
 
-    scanf_returned = fscanf(
-            txt_file_ptr,
-            "%d %d %lf %d",
-            &phi_grid_size, &theta_grid_size, &step_size, &time_steps
-    );
+    scanf_returned = fscanf(txt_file_ptr, "%d", &theta_grid_size);
 
     fclose(txt_file_ptr);
 
-    if (scanf_returned != 4)
+    if (scanf_returned != 1)
     {
         printf("\n\nWrong number of parameters or bad format in %s", fname);
         exit(EXIT_FAILURE);
     }
 
-    if (num_species == 1)
-    {
-        frac_b = 0.0;
-        frac_a = 1.0;
-    }
-
     return equation_structure(
-            phi_grid_size, theta_grid_size, step_size, time_steps,
+            1, theta_grid_size, 0, 0,
             nabla_coef, rotation_freq, frac_a, frac_b, ga, gb, gab
     );
 
@@ -306,27 +254,18 @@ EqDataPkg setup_equation(char prefix [], int num_species, int line)
 
 
 void setup_initial_condition(
-        EqDataPkg EQ, char prefix [], Carray state_a, Carray state_b)
+        EqDataPkg EQ, char prefix [], Rarray state_a, Rarray state_b)
 {
     int
         i,
-        nphi,
         ntheta,
         fscanf_val;
-    double
-        real,
-        imag;
-    Rarray
-        abs2;
     char
         fname[100];
     FILE
         * txt_file_ptr;
 
-    nphi = EQ->nphi;
     ntheta = EQ->ntheta;
-
-    abs2 = rarrDef(nphi * ntheta);
 
     // open file with initial condition set on the grid - species A
     strcpy(fname, "input/");
@@ -344,17 +283,15 @@ void setup_initial_condition(
         printf(" ..... Found !");
     }
 
-    for (i = 0; i < nphi * ntheta; i++)
+    for (i = 0; i < ntheta; i++)
     {
-        fscanf_val = fscanf(txt_file_ptr, " (%lf%lfj)", &real, &imag);
-        if (fscanf_val != 2)
+        fscanf_val = fscanf(txt_file_ptr, "%lf", &state_a[i]);
+        if (fscanf_val != 1)
         {
             printf("\n\nProblem reading initial condition data: ");
             printf("%d data points read successfully\n\n", i);
             exit(EXIT_FAILURE);
         }
-        state_a[i] = real + I * imag;
-        abs2[i] = real*real + imag*imag;
     }
     fclose(txt_file_ptr);
 
@@ -374,21 +311,18 @@ void setup_initial_condition(
         printf(" ..... Found !");
     }
 
-    for (i = 0; i < nphi * ntheta; i++)
+    for (i = 0; i < ntheta; i++)
     {
-        fscanf_val = fscanf(txt_file_ptr, " (%lf%lfj)", &real, &imag);
-        if (fscanf_val != 2)
+        fscanf_val = fscanf(txt_file_ptr, "%lf", &state_b[i]);
+        if (fscanf_val != 1)
         {
             printf("\n\nProblem reading initial condition data: ");
             printf("%d data points read successfully\n\n", i);
             exit(EXIT_FAILURE);
         }
-        state_b[i] = real + I * imag;
-        abs2[i] = real*real + imag*imag;
     }
     fclose(txt_file_ptr);
 
-    free(abs2);
 }
 
 
@@ -408,8 +342,12 @@ int main(int argc, char * argv[])
     int
         i,
         njobs,
-        num_species;
+        num_species,
+        azi_a,
+        azi_b;
     double
+        mu_a,
+        mu_b,
         start,      // start trigger to measure time
         time_used;  // Time used in calling evolution routine
     char
@@ -420,7 +358,7 @@ int main(int argc, char * argv[])
         outfname[100];  // output file name prefix
     FILE
         * txt_file_ptr;  // grid and time information
-    Carray
+    Rarray
         Sa,
         Sb;
     EqDataPkg
@@ -464,13 +402,13 @@ int main(int argc, char * argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (num_species < 1 || num_species > 2)
+    if (num_species != 2)
     {
         printf("\nInvalid number of species %d in job.conf\n\n", num_species);
         exit(EXIT_FAILURE);
     }
 
-    printf("\n\nImaginary time propagation for %d species", num_species);
+    printf("\n\nNewton with conjugate gradient method");
 
     strcpy(fname, "input/");
     strcat(fname, infname);
@@ -486,62 +424,34 @@ int main(int argc, char * argv[])
 
         printf("\n\n");
         sepline();
-        printf("\nInitiating job %d ...", i);
-
-        printf("\n\n");
-        printf("\t\t**********************************************\n");
-        printf("\t\t*                                            *\n");
-        printf("\t\t*           CONFIGURING FROM FILES           *\n");
-        printf("\t\t*                                            *\n");
-        printf("\t\t**********************************************\n");
+        printf("Initiating job %d ...", i);
 
         // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
-        EQ = setup_equation(infname, num_species, i);
+        EQ = setup_equation(infname, num_species, i, &azi_a, &azi_b, &mu_a, &mu_b);
 
-        save_equation_setup(outfname, EQ, num_species, i);
+        save_equation_setup(outfname, EQ, mu_a, mu_b, azi_a, azi_b, i);
 
-        // configure initial condition
-        Sa = carrDef(EQ->nphi * EQ->ntheta);
-        Sb = carrDef(EQ->nphi * EQ->ntheta);
-        setup_initial_condition(EQ, infname, Sa, Sb);
+        if (i == 1)
+        {
+            // configure initial condition
+            Sa = rarrDef(EQ->ntheta);
+            Sb = rarrDef(EQ->ntheta);
+            setup_initial_condition(EQ, infname, Sa, Sb);
+        }
 
-        printf("\n\n\n\n");
+        printf("\n\n");
         printf("\t\t*********************************************\n");
         printf("\t\t*                                           *\n");
-        printf("\t\t*            GRID SPECIFICATIONS            *\n");
-        printf("\t\t*                                           *\n");
-        printf("\t\t*********************************************\n");
-
-        printf("\nphi = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
-                EQ->phi[0], EQ->phi[1],
-                EQ->phi[EQ->nphi - 2], EQ->phi[EQ->nphi - 1]
-        );
-        printf("%d grid points with spacing = %.3lf\n",EQ->nphi, EQ->dphi);
-
-        printf("\ntheta = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
-                EQ->theta[0], EQ->theta[1],
-                EQ->theta[EQ->ntheta-2], EQ->theta[EQ->ntheta-1]
-        );
-        printf("%d grid points with spacing = %.3lf\n",
-                EQ->ntheta, EQ->dtheta
-        );
-        printf("\n%d time steps of size %.6lf, final time = %.2lf\n",
-                EQ->nt, EQ->dt, EQ->nt*EQ->dt
-        );
-
-        printf("\n\n\n\n");
-        printf("\t\t*********************************************\n");
-        printf("\t\t*                                           *\n");
-        printf("\t\t*         START INTEGRATION ROUTINE         *\n");
+        printf("\t\t*            START NEWTON METHOD            *\n");
         printf("\t\t*                                           *\n");
         printf("\t\t*********************************************\n");
 
         start = omp_get_wtime();
 
-        stationaryFixedNorm(EQ, Sa, Sb, 5E-3, 30);
+        stationaryNewton(EQ, Sa, Sb, 5E-4, 99, mu_a, mu_b, azi_a, azi_b);
 
         time_used = (double) (omp_get_wtime() - start);
-        printf("\n\nTime elapsed");
+        printf("\nTime elapsed");
         printf(" : %.0lf sec = ",time_used);
         TimePrint(time_used);
 
@@ -549,17 +459,18 @@ int main(int argc, char * argv[])
         strcat(fname, outfname);
         strcat(fname, "_speciesA_job");
         strcat(fname, line_str);
-        strcat(fname, "_imagtime.dat");
-        carr_txt(fname, EQ->nphi * EQ->ntheta, Sa);
+        strcat(fname, "_newton.dat");
+        rarr_txt(fname, EQ->ntheta, Sa);
         strcpy(fname, "output/");
         strcat(fname, outfname);
         strcat(fname, "_speciesB_job");
         strcat(fname, line_str);
-        strcat(fname, "_imagtime.dat");
-        carr_txt(fname, EQ->nphi * EQ->ntheta, Sb);
+        strcat(fname, "_newton.dat");
+        rarr_txt(fname, EQ->ntheta, Sb);
+        save_obs_2species(outfname, EQ, Sa, Sb, azi_a, azi_b, i);
 
-        free(Sa);
-        free(Sb);
+        // free(Sa);
+        // free(Sb);
         ReleaseEqDataPkg(EQ);
     }
 

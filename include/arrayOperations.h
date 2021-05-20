@@ -24,6 +24,7 @@ void rarrFillInc(int n, double x0, double dx, Rarray v);
 
 
 void carrCopy(int n, Carray from, Carray to);
+void carrCopy_from_real(int n, Rarray from, Carray to);
 void rarrCopy(int n, Rarray from, Rarray to);
 // Copy elements "from" array "to" array
 

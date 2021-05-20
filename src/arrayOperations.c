@@ -68,6 +68,15 @@ void carrCopy(int n, Carray from, Carray to)
 
 
 
+void carrCopy_from_real(int n, Rarray from, Carray to)
+{
+    int i;
+
+    for (i = 0; i < n; i++) to[i] = from[i] + 0.0 * I;
+}
+
+
+
 void rarrCopy(int n, Rarray from, Rarray to)
 {
     int i;
@@ -116,7 +125,7 @@ void Carray2MKL(int n, Carray b, CMKLarray a)
 void carrRealPart(int n, Carray v, Rarray vreal)
 {
     int i;
-    
+
     for (i = 0; i < n; i++) vreal[i] = creal(v[i]);
 }
 

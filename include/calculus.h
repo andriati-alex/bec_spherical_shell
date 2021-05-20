@@ -10,6 +10,8 @@ double complex Csimps1D(int, Carray, double);
 
 double Rsimps1D(int, Rarray, double);
 
+double Rsimps1D_jac(int, Rarray, double, Rarray);
+
 double complex Csimps2D(int, int, Carray, double, double);
 
 double Rsimps2D(int, int, Rarray, double, double);

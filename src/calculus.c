@@ -94,6 +94,57 @@ double Rsimps1D(int n, Rarray f, double h)
 }
 
 
+double Rsimps1D_jac(int n, Rarray fun, double h, Rarray jac)
+{
+
+    int
+        i;
+    double
+        sum;
+    Rarray
+        f;
+
+    f = rarrDef(n);
+    sum = 0;
+
+    for (i = 0; i < n; i++)
+    {
+        f[i] = fun[i] * jac[i];
+    }
+
+    if (n % 2 == 0)
+    {
+
+    //  Case the number of points is even then must integrate the last
+    //  chunk using simpson's 3/8 rule to maintain accuracy
+
+        for (i = 0; i < (n - 4); i = i + 2)
+        {
+            sum = sum + f[i] + 4 * f[i + 1] + f[i + 2];
+        }
+        sum = sum * h / 3; // End 3-point simpsons intervals
+        sum = sum + (f[n-4] + 3 * (f[n-3] + f[n-2]) + f[n-1]) * 3 * h / 8;
+
+    }
+
+    else
+    {
+
+        for (i = 0; i < n - 2; i = i + 2)
+        {
+            sum = sum + f[i] + 4 * f[i + 1] + f[i + 2];
+        }
+        sum = sum * h / 3; // End 3-point simpsons intervals
+
+    }
+
+    return sum;
+
+    free(f);
+
+}
+
+
 
 
 

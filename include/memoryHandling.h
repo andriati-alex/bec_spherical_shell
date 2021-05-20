@@ -37,6 +37,8 @@ TwoSpeciesState alloc_two_species_struct(int, int);
 
 void pkg_states(Carray, Carray, TwoSpeciesState);
 
+void pkg_real_states(Rarray, Rarray, TwoSpeciesState);
+
 void unpkg_states(Carray, Carray, TwoSpeciesState);
 
 void set_states_from_parts(TwoSpeciesState);
