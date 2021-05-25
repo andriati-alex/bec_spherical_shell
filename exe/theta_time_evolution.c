@@ -343,6 +343,7 @@ int main(int argc, char * argv[])
     int
         N,
         i,
+        constrained,
         njobs,
         azi_a,
         azi_b,
@@ -364,7 +365,7 @@ int main(int argc, char * argv[])
     EqDataPkg
         EQ;
 
-    txt_file_ptr = fopen("job.conf", "r");
+    txt_file_ptr = fopen("imag-job.conf", "r");
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n", "job.conf");
@@ -389,6 +390,10 @@ int main(int argc, char * argv[])
                 break;
             case 3:
                 fscanf(txt_file_ptr, "%s", outfname);
+                i = i + 1;
+                break;
+            case 4:
+                fscanf(txt_file_ptr, "%d", &constrained);
                 break;
         }
         ReachNewLine(txt_file_ptr);
@@ -396,7 +401,7 @@ int main(int argc, char * argv[])
 
     fclose(txt_file_ptr);
 
-    if (i != 3)
+    if (i != 4)
     {
         printf("\nWrong number of parameter read from job.conf file\n\n");
         exit(EXIT_FAILURE);
@@ -470,7 +475,14 @@ int main(int argc, char * argv[])
 
         start = omp_get_wtime();
 
-        N = splitstep_theta_sphere_equals(EQ, Sa, Sb, azi_a, azi_b);
+        if (constrained)
+        {
+            N = splitstep_theta_sphere_equals(EQ, Sa, Sb, azi_a, azi_b);
+        }
+        else
+        {
+            N = splitstep_theta_sphere(EQ, Sa, Sb, azi_a, azi_b);
+        }
         // Record data
         strcpy(fname, "output/");
         strcat(fname, outfname);

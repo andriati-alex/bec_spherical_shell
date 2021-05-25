@@ -3,7 +3,7 @@ import scipy.optimize as opt
 from math import pi, sqrt, factorial
 from scipy.integrate import simps
 from scipy.special import sph_harm
-from numba import njit, prange, int32, float64, complex128
+from numba import njit, prange, int32, complex128
 
 
 def sphere_integration(dphi, theta, func):

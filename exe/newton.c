@@ -362,7 +362,7 @@ int main(int argc, char * argv[])
     EqDataPkg
         EQ;
 
-    txt_file_ptr = fopen("job.conf", "r");
+    txt_file_ptr = fopen("newton-job.conf", "r");
     if (txt_file_ptr == NULL)
     {
         printf("\n\nERROR: impossible to open file %s\n", "job.conf");
