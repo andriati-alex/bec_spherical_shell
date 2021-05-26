@@ -111,11 +111,75 @@ def run_from_newton(files_path, fname_prefix, m_vals, n_eigs):
         out_file.write("\n")
 
 
+def special(files_path, fname_prefix, m_vals, n_eigs):
+    prefix = os.path.join(files_path, fname_prefix)
+    suffix = "_newton.dat"
+    eq_data = np.loadtxt(prefix + "_equation" + suffix)
+    if eq_data.ndim == 1:
+        eq_data = eq_data.reshape(1, eq_data.size)
+    obs_data = np.loadtxt(prefix + "_obs" + suffix)
+    if obs_data.ndim == 1:
+        obs_data = obs_data.reshape(1, obs_data.size)
+    njobs = eq_data.shape[0]
+    tht_pts = int(eq_data[0, 0])
+    mu_a_sweep = eq_data[:, 3]
+    mu_b_sweep = eq_data[:, 4]
+    vort_a = int(eq_data[0, 5])
+    vort_b = int(eq_data[0, 6])
+    frac_a = obs_data[:, 5]
+    frac_b = obs_data[:, 6]
+    ga_sweep = obs_data[:, 7] / (2 * pi)
+    gb_sweep = obs_data[:, 8] / (2 * pi)
+    gab_sweep = obs_data[:, 9] / (2 * pi)
+    norm_a = obs_data[:, 3]
+    norm_b = obs_data[:, 4]
+    params_pack = zip(
+        mu_a_sweep,
+        mu_b_sweep,
+        ga_sweep,
+        gb_sweep,
+        gab_sweep,
+        frac_a,
+        frac_b,
+        norm_a,
+        norm_b,
+    )
+    out_file = open(prefix + "_stability.dat", "w")
+    out_file.write("# {} largest imag part for each m\n".format(n_eigs))
+    out_file.write("# m :")
+    for m in m_vals:
+        out_file.write(" {}".format(m))
+    out_file.write("\n")
+    for i, params_tuple in enumerate(params_pack):
+        mu_a, mu_b, ga, gb, gab, fa, fb, na, nb = params_tuple
+        bdg = bdg_driver.BdGOperator(tht_pts, vort_a, vort_b, fa, fb)
+        job = i + 1
+        print("Working on job [{}/{}]".format(job, njobs))
+        fname_a = prefix + "_speciesA" + "_job{}".format(job) + suffix
+        fname_b = prefix + "_speciesB" + "_job{}".format(job) + suffix
+        sa = np.loadtxt(fname_a) / sqrt(na)
+        sb = np.loadtxt(fname_b) / sqrt(nb)
+        gab_vals = np.arange(min(50, ga + 50), max(-50, ga - 50), -0.1)
+        for gab_val in gab_vals:
+            g_intra = ga - gab_val
+            out_file.write("{:.2f} {:.2f}".format(g_intra, gab_val))
+            for m in m_vals:
+                eigs = bdg.lowlying_eig(m, mu_a, mu_b, ga, gb, gab, sa, sb)
+                imag_eigs = np.sort(eigs.imag)[::-1]
+                for i in range(n_eigs):
+                    out_file.write(" {:.5f}".format(imag_eigs[i]))
+            out_file.write("\n")
+
+
 if __name__ == "__main__":
     default_data_dir = os.path.join(
         os.path.expanduser("~"), "programs/bec_spherical_shell/output"
     )
-    methods = {"imagtime": run_from_imagtime, "newton": run_from_newton}
+    methods = {
+        "imagtime": run_from_imagtime,
+        "newton": run_from_newton,
+        "special": special,
+    }
     p = argparse.ArgumentParser(
         usage="python %(prog)s `file_name_prefix` -mvals m1 ... mN ",
         description="Compute imag eigenvalues of several jobs",
