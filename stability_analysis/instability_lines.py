@@ -98,7 +98,7 @@ def run_from_newton(files_path, fname_prefix, m_vals, n_eigs):
         mu_a, mu_b, ga, gb, gab, fa, fb, na, nb = params_tuple
         bdg = bdg_driver.BdGOperator(tht_pts, vort_a, vort_b, fa, fb)
         job = i + 1
-        print("Working on job [{:4d}/{}]".format(job, njobs))
+        print("Working on job [{}/{}]".format(job, njobs))
         fname_a = prefix + "_speciesA" + "_job{}".format(job) + suffix
         fname_b = prefix + "_speciesB" + "_job{}".format(job) + suffix
         sa = np.loadtxt(fname_a) / sqrt(na)
