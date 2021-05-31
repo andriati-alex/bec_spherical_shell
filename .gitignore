@@ -7,5 +7,5 @@ log/*
 figures/*
 __pycache__
 backup_files/*
-job.conf
+*.conf
 *.txt
