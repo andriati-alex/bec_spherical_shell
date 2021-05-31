@@ -150,6 +150,8 @@ def special(files_path, fname_prefix, m_vals, n_eigs):
     for m in m_vals:
         out_file.write(" {}".format(m))
     out_file.write("\n")
+    gbound = 50. / 2 / pi
+    g_step = 0.08 / 2 / pi
     for i, params_tuple in enumerate(params_pack):
         mu_a, mu_b, ga, gb, gab, fa, fb, na, nb = params_tuple
         bdg = bdg_driver.BdGOperator(tht_pts, vort_a, vort_b, fa, fb)
@@ -159,12 +161,20 @@ def special(files_path, fname_prefix, m_vals, n_eigs):
         fname_b = prefix + "_speciesB" + "_job{}".format(job) + suffix
         sa = np.loadtxt(fname_a) / sqrt(na)
         sb = np.loadtxt(fname_b) / sqrt(nb)
-        gab_vals = np.arange(min(50, ga + 50), max(-50, ga - 50), -0.1)
+        gab_vals = np.arange(
+                min(gbound, ga + gbound),
+                max(-gbound, ga - gbound) + g_step / 2,
+                -g_step
+        )
         for gab_val in gab_vals:
             g_intra = ga - gab_val
-            out_file.write("{:.2f} {:.2f}".format(g_intra, gab_val))
+            out_file.write(
+                    "{:.2f} {:.2f}".format(g_intra * 2 * pi, gab_val * 2 * pi)
+            )
             for m in m_vals:
-                eigs = bdg.lowlying_eig(m, mu_a, mu_b, ga, gb, gab, sa, sb)
+                eigs = bdg.lowlying_eig(
+                        m, mu_a, mu_b, g_intra, g_intra, gab_val, sa, sb
+                )
                 imag_eigs = np.sort(eigs.imag)[::-1]
                 for i in range(n_eigs):
                     out_file.write(" {:.5f}".format(imag_eigs[i]))
