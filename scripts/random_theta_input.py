@@ -41,7 +41,7 @@ def theta_random_state(lmax, tht_pts, azi, seed):
 
 if __name__ == "__main__":
     default_input_dir = os.path.join(
-        os.path.expanduser("~"), "programs/bec_spherical_shell/input"
+        os.path.expanduser("~"), "projects/bec_spherical_shell/input"
     )
     p = argparse.ArgumentParser(
         usage="python %(prog)s n_theta dt n_dt [optional_args] ",

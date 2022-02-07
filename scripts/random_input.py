@@ -25,7 +25,7 @@ def general_spherical_state(lmax, phi_pts, tht_pts, seed):
             - 0.5
             - 0.5j
         )
-        * np.sin(tht)
+        * np.sin(tht[1 : tht_pts - 1, 1 : phi_pts - 1])
     )
     psi = sph_harm(0, 0, phi, tht) + grid_noise
     number_sph_harm = int((2 * lmax + 1 + 1) * (lmax + 1) / 2)
@@ -49,7 +49,7 @@ def general_spherical_state(lmax, phi_pts, tht_pts, seed):
 
 if __name__ == "__main__":
     default_input_dir = os.path.join(
-        os.path.expanduser("~"), "programs/bec_spherical_shell/input"
+        os.path.expanduser("~"), "projects/bec_spherical_shell/input"
     )
     p = argparse.ArgumentParser(
         usage="python %(prog)s n_phi n_theta dt n_dt [optional_args] ",

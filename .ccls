@@ -1,0 +1,5 @@
+%compile_commands.json
+%c -std=c11
+-I/home/andriati/projects/bec_spherical_shell/include
+-Wall
+-Wextra
