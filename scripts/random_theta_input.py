@@ -4,7 +4,6 @@ from random import randint
 import numpy as np
 from math import pi, sqrt, factorial
 from scipy.integrate import simps
-from scipy.special import sph_harm
 
 
 def theta_random_state(lmax, tht_pts, azi, seed):
@@ -34,8 +33,8 @@ def theta_random_state(lmax, tht_pts, azi, seed):
         - 0.5
         - 0.5j
     )
-    for l in range(1, lmax + 1):
-        psi = psi + w[l - 1] * trig_func(l * tht) / sqrt(factorial(l))
+    for j in range(1, lmax + 1):
+        psi = psi + w[j - 1] * trig_func(j * tht) / sqrt(factorial(j))
     return psi / sqrt(simps(np.sin(tht) * abs(psi) ** 2, dx=dtht))
 
 

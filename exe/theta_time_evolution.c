@@ -1,34 +1,37 @@
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include "imagtimeIntegrator.h"
+#include <math.h>
+#include <omp.h>
+#include <stdio.h>
+#include <string.h>
 
-
-void TimePrint(double t)
+void
+TimePrint(double t)
 {
 
     // format and print time in days / hours / minutes
 
-    int
-        tt = (int) t,
-        hours = 0,
-        mins  = 0;
+    int tt = (int) t, hours = 0, mins = 0;
 
-    if ( tt / 3600  > 0 )
-    { hours = tt / 3600;  tt = tt % 3600;  }
+    if (tt / 3600 > 0)
+    {
+        hours = tt / 3600;
+        tt = tt % 3600;
+    }
 
-    if ( tt / 60    > 0 )
-    { mins  = tt / 60;    tt = tt % 60;    }
+    if (tt / 60 > 0)
+    {
+        mins = tt / 60;
+        tt = tt % 60;
+    }
 
-    printf(" %d hour(s) %d minute(s)",hours,mins);
+    printf(" %d hour(s) %d minute(s)", hours, mins);
 }
 
-
-void ReachNewLine(FILE * f)
+void
+ReachNewLine(FILE* f)
 {
-    /* Read until get new line or 'end of file' in a opened file. */
-    char
-        sentinel;
+    /* Read until get new line or 'end of file(EOF)' in a opened file. */
+    char sentinel;
     while (1)
     {
         fscanf(f, "%c", &sentinel);
@@ -36,26 +39,21 @@ void ReachNewLine(FILE * f)
     }
 }
 
-
-void save_obs_2species(
-        char prefix [], EqDataPkg EQ, Carray Sa, Carray Sb, int azi_a,
-        int azi_b, int line)
+void
+save_obs_2species(
+    char      prefix[],
+    EqDataPkg EQ,
+    Carray    Sa,
+    Carray    Sb,
+    int       azi_a,
+    int       azi_b,
+    int       line)
 {
-    int
-        ntheta;
-    double
-        mu_a,
-        mu_b,
-        energy,
-        kin_energy,
-        den_overlap;
-    Rarray
-        abs_square_a,
-        abs_square_b;
-    char
-        fname[100];
-    FILE
-        * txt_file_ptr;
+    int    ntheta;
+    double mu_a, mu_b, energy, kin_energy, den_overlap;
+    Rarray abs_square_a, abs_square_b;
+    char   fname[100];
+    FILE*  txt_file_ptr;
 
     ntheta = EQ->ntheta;
 
@@ -64,17 +62,18 @@ void save_obs_2species(
     carrAbs2(ntheta, Sa, abs_square_a);
     carrAbs2(ntheta, Sb, abs_square_b);
 
-    energy = functionals_theta(
-            EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b
-    );
+    energy =
+        functionals_theta(EQ, Sa, Sb, &kin_energy, &mu_a, &mu_b, azi_a, azi_b);
     den_overlap = theta_density_overlap(EQ, abs_square_a, abs_square_b);
 
     strcpy(fname, "output/");
     strcat(fname, prefix);
     strcat(fname, "_2species_obs_imagtime.dat");
 
-    if (line > 1) txt_file_ptr = fopen(fname, "a");
-    else          txt_file_ptr = fopen(fname, "w");
+    if (line > 1)
+        txt_file_ptr = fopen(fname, "a");
+    else
+        txt_file_ptr = fopen(fname, "w");
 
     if (txt_file_ptr == NULL)
     {
@@ -82,32 +81,34 @@ void save_obs_2species(
         exit(EXIT_FAILURE);
     }
 
-    fprintf(txt_file_ptr,
-            "%.10lf %.10lf %.10lf %.10lf %.10lf\n",
-            energy, kin_energy, mu_a, mu_b, den_overlap
-    );
+    fprintf(
+        txt_file_ptr,
+        "%.10lf %.10lf %.10lf %.10lf %.10lf\n",
+        energy,
+        kin_energy,
+        mu_a,
+        mu_b,
+        den_overlap);
 
     free(abs_square_b);
     free(abs_square_a);
     fclose(txt_file_ptr);
 }
 
-
-void save_equation_setup(
-        char prefix [], EqDataPkg EQ, int num_species, int azi_a, int azi_b,
-        int line)
+void
+save_equation_setup(char prefix[], EqDataPkg EQ, int azi_a, int azi_b, int line)
 {
-    char
-        fname[100];
-    FILE
-        * txt_file_ptr;
+    char  fname[100];
+    FILE* txt_file_ptr;
 
     strcpy(fname, "output/");
     strcat(fname, prefix);
     strcat(fname, "_2species_equation_imagtime.dat");
 
-    if (line > 1) txt_file_ptr = fopen(fname, "a");
-    else          txt_file_ptr = fopen(fname, "w");
+    if (line > 1)
+        txt_file_ptr = fopen(fname, "a");
+    else
+        txt_file_ptr = fopen(fname, "w");
 
     if (txt_file_ptr == NULL)
     {
@@ -116,46 +117,34 @@ void save_equation_setup(
     }
 
     // Grid domain
-    fprintf(txt_file_ptr,
-            "%d %lf %d ",
-            EQ->ntheta, EQ->dt, EQ->nt
-    );
+    fprintf(txt_file_ptr, "%d %lf %d ", EQ->ntheta, EQ->dt, EQ->nt);
 
     // Equation parameters
     fprintf(
-            txt_file_ptr,
-            "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %d %d\n",
-            EQ->nabla_coef, EQ->omega, EQ->frac_a, EQ->frac_b,
-            EQ->ga * 2 * PI, EQ->gb * 2 * PI, EQ->gab * 2 * PI, azi_a, azi_b
-    );
+        txt_file_ptr,
+        "%.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %.15lf %d %d\n",
+        EQ->nabla_coef,
+        EQ->omega,
+        EQ->frac_a,
+        EQ->frac_b,
+        EQ->ga * 2 * PI,
+        EQ->gb * 2 * PI,
+        EQ->gab * 2 * PI,
+        azi_a,
+        azi_b);
     fclose(txt_file_ptr);
 }
 
-
-EqDataPkg setup_equation(
-        char prefix [], int num_species, int line, int * azi_a, int * azi_b)
+EqDataPkg
+setup_equation(char prefix[], int line, int* azi_a, int* azi_b)
 {
 
-/** Read line by line of _domain file and _eq to setup the equation **/
+    /** Read line by line of _domain file and _eq to setup the equation **/
 
-    int
-        scanf_returned,
-        theta_grid_size,
-        phi_grid_size,
-        time_steps;
-    double
-        step_size,
-        nabla_coef,
-        rotation_freq,
-        frac_a,
-        frac_b,
-        ga,
-        gb,
-        gab;
-    char
-        fname[100];
-    FILE
-        * txt_file_ptr;
+    int    scanf_returned, theta_grid_size, phi_grid_size, time_steps;
+    double step_size, nabla_coef, rotation_freq, frac_a, frac_b, ga, gb, gab;
+    char   fname[100];
+    FILE*  txt_file_ptr;
 
     // Try openning file with equation parameters
     strcpy(fname, "input/");
@@ -167,8 +156,7 @@ EqDataPkg setup_equation(
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
         exit(EXIT_FAILURE);
-    }
-    else
+    } else
     {
         printf(" ................ Found !");
     }
@@ -177,10 +165,17 @@ EqDataPkg setup_equation(
     for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
 
     scanf_returned = fscanf(
-            txt_file_ptr, "%lf %lf %lf %lf %lf %lf %lf %d %d",
-            &nabla_coef, &rotation_freq, &frac_a, &frac_b, &ga, &gb, &gab,
-            azi_a, azi_b
-    );
+        txt_file_ptr,
+        "%lf %lf %lf %lf %lf %lf %lf %d %d",
+        &nabla_coef,
+        &rotation_freq,
+        &frac_a,
+        &frac_b,
+        &ga,
+        &gb,
+        &gab,
+        azi_a,
+        azi_b);
     ga = ga / (2 * PI);
     gb = gb / (2 * PI);
     gab = gab / (2 * PI);
@@ -199,12 +194,11 @@ EqDataPkg setup_equation(
     strcat(fname, "_domain.dat");
     printf("\nLooking for %s", fname);
     txt_file_ptr = fopen(fname, "r");
-    if (txt_file_ptr == NULL)  // impossible to open file
+    if (txt_file_ptr == NULL) // impossible to open file
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
         exit(EXIT_FAILURE);
-    }
-    else
+    } else
     {
         printf(" ............ Found !");
     }
@@ -213,10 +207,7 @@ EqDataPkg setup_equation(
     for (int i = 1; i < line; i++) ReachNewLine(txt_file_ptr);
 
     scanf_returned = fscanf(
-            txt_file_ptr,
-            "%d %lf %d",
-            &theta_grid_size, &step_size, &time_steps
-    );
+        txt_file_ptr, "%d %lf %d", &theta_grid_size, &step_size, &time_steps);
 
     fclose(txt_file_ptr);
 
@@ -229,29 +220,28 @@ EqDataPkg setup_equation(
     phi_grid_size = 0;
 
     return equation_structure(
-            phi_grid_size, theta_grid_size, step_size, time_steps,
-            nabla_coef, rotation_freq, frac_a, frac_b, ga, gb, gab
-    );
-
+        phi_grid_size,
+        theta_grid_size,
+        step_size,
+        time_steps,
+        nabla_coef,
+        rotation_freq,
+        frac_a,
+        frac_b,
+        ga,
+        gb,
+        gab);
 }
 
-
-void setup_initial_condition(
-        EqDataPkg EQ, char prefix [], Carray state_a, Carray state_b)
+void
+setup_initial_condition(
+    EqDataPkg EQ, char prefix[], Carray state_a, Carray state_b)
 {
-    int
-        i,
-        ntheta,
-        fscanf_val;
-    double
-        real,
-        imag;
-    Rarray
-        abs2;
-    char
-        fname[100];
-    FILE
-        * txt_file_ptr;
+    int    i, ntheta, fscanf_val;
+    double real, imag;
+    Rarray abs2;
+    char   fname[100];
+    FILE*  txt_file_ptr;
 
     ntheta = EQ->ntheta;
 
@@ -263,12 +253,11 @@ void setup_initial_condition(
     strcat(fname, "_speciesA_init.dat");
     printf("\nLooking for %s", fname);
     txt_file_ptr = fopen(fname, "r");
-    if (txt_file_ptr == NULL)  // impossible to open file
+    if (txt_file_ptr == NULL) // impossible to open file
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
         exit(EXIT_FAILURE);
-    }
-    else
+    } else
     {
         printf(" ..... Found !");
     }
@@ -283,12 +272,13 @@ void setup_initial_condition(
             exit(EXIT_FAILURE);
         }
         state_a[i] = real + I * imag;
-        abs2[i] = sin(EQ->theta[i]) * (real*real + imag*imag);
+        abs2[i] = sin(EQ->theta[i]) * (real * real + imag * imag);
     }
     fclose(txt_file_ptr);
 
-    printf("\nstate a loaded with norm = %.6lf\n",
-            Rsimps1D(ntheta, abs2, EQ->dtheta));
+    printf(
+        "\nstate a loaded with norm = %.6lf\n",
+        Rsimps1D(ntheta, abs2, EQ->dtheta));
 
     // open file with initial condition set on the grid - species B
     strcpy(fname, "input/");
@@ -296,12 +286,11 @@ void setup_initial_condition(
     strcat(fname, "_speciesB_init.dat");
     printf("\nLooking for %s", fname);
     txt_file_ptr = fopen(fname, "r");
-    if (txt_file_ptr == NULL)  // impossible to open file
+    if (txt_file_ptr == NULL) // impossible to open file
     {
         printf("\n\nERROR: impossible to open file %s\n\n", fname);
         exit(EXIT_FAILURE);
-    }
-    else
+    } else
     {
         printf(" ..... Found !");
     }
@@ -316,21 +305,19 @@ void setup_initial_condition(
             exit(EXIT_FAILURE);
         }
         state_b[i] = real + I * imag;
-        abs2[i] = sin(EQ->theta[i]) * (real*real + imag*imag);
+        abs2[i] = sin(EQ->theta[i]) * (real * real + imag * imag);
     }
     fclose(txt_file_ptr);
 
-    printf("\nstate b loaded with norm = %.6lf\n",
-            Rsimps1D(ntheta, abs2, EQ->dtheta));
+    printf(
+        "\nstate b loaded with norm = %.6lf\n",
+        Rsimps1D(ntheta, abs2, EQ->dtheta));
 
     free(abs2);
 }
 
-
-
-
-
-int main(int argc, char * argv[])
+int
+main()
 {
 
     /*  DEFINE THE NUMBER OF THREADS BASED ON THE COMPUTER ARCHITECTURE
@@ -340,30 +327,12 @@ int main(int argc, char * argv[])
     omp_set_num_threads(4);
     mkl_set_num_threads(1);
 
-    int
-        N,
-        i,
-        constrained,
-        njobs,
-        azi_a,
-        azi_b,
-        num_species;
-    double
-        start,      // start trigger to measure time
-        time_used;  // Time used in calling evolution routine
-    char
-        c,
-        line_str[20],
-        fname[100],     // name of files to open
-        infname[100],   // input file name prefix
-        outfname[100];  // output file name prefix
-    FILE
-        * txt_file_ptr;  // grid and time information
-    Carray
-        Sa,
-        Sb;
-    EqDataPkg
-        EQ;
+    int       N, i, constrained, njobs, azi_a, azi_b, num_species;
+    double    start, time_used; // Time used in calling evolution routine
+    char      c, line_str[20], fname[100], infname[100], outfname[100];
+    FILE*     txt_file_ptr;
+    Carray    Sa, Sb;
+    EqDataPkg EQ;
 
     txt_file_ptr = fopen("imag-job.conf", "r");
     if (txt_file_ptr == NULL)
@@ -376,8 +345,14 @@ int main(int argc, char * argv[])
     while ((c = getc(txt_file_ptr)) != EOF)
     {
         // jump comment lines marked started with #
-        if (c == '#') { ReachNewLine(txt_file_ptr); continue; }
-        else          { fseek(txt_file_ptr, -1, SEEK_CUR);    }
+        if (c == '#')
+        {
+            ReachNewLine(txt_file_ptr);
+            continue;
+        } else
+        {
+            fseek(txt_file_ptr, -1, SEEK_CUR);
+        }
         switch (i)
         {
             case 1:
@@ -439,9 +414,9 @@ int main(int argc, char * argv[])
         printf("\t\t**********************************************\n");
 
         // PACK DOMAIN AND PARAMETERS INFORMATION IN A STRUCTURE
-        EQ = setup_equation(infname, num_species, i, &azi_a, &azi_b);
+        EQ = setup_equation(infname, i, &azi_a, &azi_b);
 
-        save_equation_setup(outfname, EQ, num_species, azi_a, azi_b, i);
+        save_equation_setup(outfname, EQ, azi_a, azi_b, i);
 
         // configure initial condition
         Sa = carrDef(EQ->ntheta);
@@ -455,16 +430,18 @@ int main(int argc, char * argv[])
         printf("\t\t*                                           *\n");
         printf("\t\t*********************************************\n");
 
-        printf("\ntheta = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
-                EQ->theta[0], EQ->theta[1],
-                EQ->theta[EQ->ntheta-2], EQ->theta[EQ->ntheta-1]
-        );
-        printf("%d grid points with spacing = %.3lf\n",
-                EQ->ntheta, EQ->dtheta
-        );
-        printf("\n%d time steps of size %.6lf, final time = %.2lf\n",
-                EQ->nt, EQ->dt, EQ->nt*EQ->dt
-        );
+        printf(
+            "\ntheta = [ %.2lf , %.2lf , ... , %.2lf , %.2lf ]\n",
+            EQ->theta[0],
+            EQ->theta[1],
+            EQ->theta[EQ->ntheta - 2],
+            EQ->theta[EQ->ntheta - 1]);
+        printf("%d grid points with spacing = %.3lf\n", EQ->ntheta, EQ->dtheta);
+        printf(
+            "\n%d time steps of size %.6lf, final time = %.2lf\n",
+            EQ->nt,
+            EQ->dt,
+            EQ->nt * EQ->dt);
 
         printf("\n\n\n\n");
         printf("\t\t*********************************************\n");
@@ -478,8 +455,7 @@ int main(int argc, char * argv[])
         if (constrained)
         {
             N = splitstep_theta_sphere_equals(EQ, Sa, Sb, azi_a, azi_b);
-        }
-        else
+        } else
         {
             N = splitstep_theta_sphere(EQ, Sa, Sb, azi_a, azi_b);
         }
@@ -500,7 +476,7 @@ int main(int argc, char * argv[])
 
         time_used = (double) (omp_get_wtime() - start);
         printf("\n\nTime elapsed in time evolution of %d steps", N);
-        printf(" : %.0lf sec = ",time_used);
+        printf(" : %.0lf sec = ", time_used);
 
         free(Sa);
         free(Sb);

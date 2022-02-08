@@ -9,3 +9,5 @@ __pycache__
 backup_files/*
 *.conf
 *.txt
+.ccls*
+.clang-format
